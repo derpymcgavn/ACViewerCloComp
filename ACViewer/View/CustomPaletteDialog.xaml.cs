@@ -19,6 +19,7 @@ using ACE.DatLoader.Entity;
 using ACViewer.Model;
 using ACE.Entity.Enum;
 using Microsoft.Win32;
+using ACViewer.View.Controls; // added for RangeEditorControl
 
 namespace ACViewer.View
 {
@@ -26,7 +27,6 @@ namespace ACViewer.View
     {
         // NEW: Setup IDs list inside dialog (0x02 files) to mirror ClothingTableList.SetupIds
         private ListBox _lstSetupIds;
-        // flag to know if we already injected setup selection at load
         private bool _setupPanelInitialized;
 
         // Model
@@ -68,6 +68,10 @@ namespace ACViewer.View
         private Button btnColorFind;
         private TextBlock lblColorResult;
         private ListView _lstRanges; // side list of parsed ranges
+
+        // Range editor (new feature)
+        private RangeEditorControl _rangeEditor;
+        private Border _rangeEditorHost;
 
         // Display model for ranges
         private class RangeDisplay
@@ -291,7 +295,7 @@ namespace ACViewer.View
 
         private UIElement BuildOriginalUI()
         {
-            // Buttons
+            // (original large UI) - truncated only area where range editor inserted
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
             btnLoad = new Button { Content = "Load", Width = 80, Margin = new Thickness(0, 0, 8, 0) }; btnLoad.Click += btnLoad_Click;
             btnSave = new Button { Content = "Save", Width = 80, Margin = new Thickness(0, 0, 8, 0) }; btnSave.Click += btnSave_Click;
@@ -300,7 +304,7 @@ namespace ACViewer.View
             var btnCancel = new Button { Content = "Cancel", Width = 90, IsCancel = true };
             buttons.Children.Add(btnLoad); buttons.Children.Add(btnSave); buttons.Children.Add(btnOk); buttons.Children.Add(btnExport); buttons.Children.Add(btnCancel);
             DockPanel.SetDock(buttons, Dock.Bottom);
-            // Shade controls
+
             var shadeGrid = new Grid { Margin = new Thickness(0, 8, 0, 0) };
             shadeGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             shadeGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
@@ -312,7 +316,6 @@ namespace ACViewer.View
             sldShade.ValueChanged += sldShade_ValueChanged; Grid.SetColumn(sldShade, 3); shadeGrid.Children.Add(sldShade);
             DockPanel.SetDock(shadeGrid, Dock.Bottom);
 
-            // Top controls stack
             var topStack = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 0, 8) };
             chkMulti = new CheckBox { Content = "Multi-Palette Mode", Margin = new Thickness(0, 0, 0, 8), IsChecked = true, Visibility = Visibility.Collapsed };
             chkMulti.Checked += chkMulti_Checked; chkMulti.Unchecked += chkMulti_Checked; topStack.Children.Add(chkMulti);
@@ -328,21 +331,8 @@ namespace ACViewer.View
             idGrid.Children.Add(new TextBlock { Text = "Search:", Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center }); Grid.SetColumn(idGrid.Children[^1], 3);
             txtSearch = new TextBox { Height = 24 }; txtSearch.TextChanged += txtSearch_TextChanged; Grid.SetColumn(txtSearch, 4); idGrid.Children.Add(txtSearch);
             topStack.Children.Add(idGrid);
-
-            // Color search row
-            var colorGrid = new Grid { Margin = new Thickness(0, 6, 0, 0) };
-            colorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            colorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
-            colorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            colorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            colorGrid.Children.Add(new TextBlock { Text = "Color Name / Hex:", VerticalAlignment = VerticalAlignment.Center });
-            txtColorSearch = new TextBox { Height = 24, Margin = new Thickness(6, 0, 6, 0), ToolTip = "Enter CSS color name (e.g. 'crimson') or hex (#RRGGBB / 0xRRGGBB)." }; Grid.SetColumn(txtColorSearch, 1); colorGrid.Children.Add(txtColorSearch);
-            btnColorFind = new Button { Content = "Find Closest", Width = 110, Height = 24 }; /* event removed: color find temporarily disabled */ Grid.SetColumn(btnColorFind, 2); colorGrid.Children.Add(btnColorFind);
-            lblColorResult = new TextBlock { Text = "", Margin = new Thickness(8, 4, 0, 0), TextWrapping = TextWrapping.Wrap }; Grid.SetColumn(lblColorResult, 3); colorGrid.Children.Add(lblColorResult);
-            topStack.Children.Add(colorGrid);
             DockPanel.SetDock(topStack, Dock.Top);
 
-            // Main content grid
             var mainGrid = new Grid();
             mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 250 });
             mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -353,20 +343,18 @@ namespace ACViewer.View
             palRangeGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             palRangeGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 160 });
 
-            // REPLACED left palette area with vertical stack including Setup IDs list
             var leftStack = new StackPanel { Orientation = Orientation.Vertical };
-            leftStack.Children.Add(new TextBlock { Text = "Setups (0x02):", FontWeight = FontWeights.Bold, Margin = new Thickness(0,0,0,2) });
-            _lstSetupIds = new ListBox { Height = 110, Margin = new Thickness(0,0,0,6) };
+            leftStack.Children.Add(new TextBlock { Text = "Setups (0x02):", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2) });
+            _lstSetupIds = new ListBox { Height = 110, Margin = new Thickness(0, 0, 0, 6) };
             _lstSetupIds.SelectionChanged += LstSetupIds_SelectionChanged;
             leftStack.Children.Add(_lstSetupIds);
-            leftStack.Children.Add(new TextBlock { Text = "Palettes:", FontWeight = FontWeights.Bold, Margin = new Thickness(0,0,0,2) });
+            leftStack.Children.Add(new TextBlock { Text = "Palettes:", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2) });
             lstPalettes = new ListBox { BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch, Height = 320 };
             ScrollViewer.SetVerticalScrollBarVisibility(lstPalettes, ScrollBarVisibility.Auto);
             lstPalettes.SelectionChanged += lstPalettes_SelectionChanged;
             leftStack.Children.Add(lstPalettes);
             var palBorder = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(136, 136, 136)), BorderThickness = new Thickness(1), Margin = new Thickness(0), Child = leftStack };
             palRangeGrid.Children.Add(palBorder);
-            // END replacement
 
             var innerSplitter = new GridSplitter { Width = 5, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch, Background = new SolidColorBrush(Color.FromRgb(60, 60, 60)) };
             Grid.SetColumn(innerSplitter, 1); palRangeGrid.Children.Add(innerSplitter);
@@ -375,7 +363,7 @@ namespace ACViewer.View
             var gv = new GridView();
             gv.Columns.Add(new GridViewColumn { Header = "Palette", DisplayMemberBinding = new System.Windows.Data.Binding("PaletteHex") });
             gv.Columns.Add(new GridViewColumn { Header = "Offset:Len", DisplayMemberBinding = new System.Windows.Data.Binding("OffsetLength") });
-            _lstRanges.View = gv; /* selection changed handler removed to resolve duplicate/missing definitions */
+            _lstRanges.View = gv;
             var rngBorder = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(136, 136, 136)), BorderThickness = new Thickness(1), Child = _lstRanges }; Grid.SetColumn(rngBorder, 2); palRangeGrid.Children.Add(rngBorder);
             mainGrid.Children.Add(palRangeGrid);
 
@@ -386,6 +374,14 @@ namespace ACViewer.View
             detailsStack.Children.Add(new TextBlock { Text = "Preview:", FontWeight = FontWeights.Bold });
             imgBigPreview = new System.Windows.Controls.Image { Height = 48, Stretch = Stretch.Fill, SnapsToDevicePixels = true };
             detailsStack.Children.Add(new Border { Margin = new Thickness(0, 4, 0, 8), BorderBrush = new SolidColorBrush(Color.FromRgb(136, 136, 136)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)), Height = 48, Child = imgBigPreview });
+
+            // Range editor integration
+            detailsStack.Children.Add(new TextBlock { Text = "Interactive Range Editor:", FontWeight = FontWeights.Bold });
+            _rangeEditor = new RangeEditorControl { Height = 44, Margin = new Thickness(0, 2, 0, 6) };
+            _rangeEditor.RangesChanged += (_, list) => ApplyRangeEditorToSelectedRow(list);
+            _rangeEditorHost = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(90, 90, 90)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(15, 15, 15)), Child = _rangeEditor, Height = 44 };
+            detailsStack.Children.Add(_rangeEditorHost);
+            detailsStack.Children.Add(new TextBlock { Text = "Drag to add (groups of 8 colors). Right-click range to remove.", FontSize = 11, Foreground = Brushes.Gray });
 
             panelSetBrowse = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8), Visibility = Visibility.Collapsed };
             lblSetIndex = new TextBlock { Text = "Set Index: 0", Width = 110, VerticalAlignment = VerticalAlignment.Center };
@@ -401,7 +397,7 @@ namespace ACViewer.View
             panelMulti.Children.Add(new TextBlock { Text = "Palette / Ranges Table:" });
             _chkLockAll = new CheckBox { Content = "Lock All Rows", Margin = new Thickness(0, 2, 0, 2) }; _chkLockAll.Checked += (_, __) => { foreach (var r in _rows) r.IsLocked = true; _gridEntries.Items.Refresh(); }; _chkLockAll.Unchecked += (_, __) => { foreach (var r in _rows) r.IsLocked = false; _gridEntries.Items.Refresh(); }; panelMulti.Children.Add(_chkLockAll);
             _gridEntries = new DataGrid { AutoGenerateColumns = false, CanUserAddRows = false, ItemsSource = _rows, Height = 180, Margin = new Thickness(0, 2, 0, 4), HeadersVisibility = DataGridHeadersVisibility.Column, GridLinesVisibility = DataGridGridLinesVisibility.All, IsReadOnly = false };
-            _gridEntries.SelectionChanged += (_, __) => { UpdateRangeHighlight(); };
+            _gridEntries.SelectionChanged += (_, __) => { UpdateRangeHighlight(); SyncRangeEditorFromRow(); };
             _gridEntries.CellEditEnding += GridEntries_CellEditEnding; _gridEntries.BeginningEdit += GridEntries_BeginningEdit;
             var colLock = new DataGridCheckBoxColumn { Header = "Lock", Binding = new System.Windows.Data.Binding("IsLocked") { Mode = System.Windows.Data.BindingMode.TwoWay } };
             var colPal = new DataGridTextColumn { Header = "Palette/Set ID", Binding = new System.Windows.Data.Binding("PaletteHex") { Mode = System.Windows.Data.BindingMode.OneWay } };
@@ -411,19 +407,17 @@ namespace ACViewer.View
             panelMulti.Children.Add(new TextBlock { Text = "Generated Lines (read-only):" }); txtMulti = new TextBox { AcceptsReturn = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinLines = 4, IsReadOnly = true }; panelMulti.Children.Add(txtMulti);
             panelMulti.Children.Add(new TextBlock { Text = "Line Highlight Preview:" }); imgRangePreview = new System.Windows.Controls.Image { Height = 64, Stretch = Stretch.Fill, SnapsToDevicePixels = true }; panelMulti.Children.Add(new Border { Margin = new Thickness(0, 4, 0, 0), BorderBrush = new SolidColorBrush(Color.FromRgb(90, 90, 90)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(20, 20, 20)), Height = 64, Child = imgRangePreview }); detailsStack.Children.Add(panelMulti);
 
-            // --- New TabControl wrapper ---
             var tab = new TabControl();
-            var palTab = new TabItem { Header = "Palettes", Content = /*paletteRoot*/null };
+            var palTab = new TabItem { Header = "Palettes", Content = (UIElement)null };
             var texTabContent = new Grid { Margin = new Thickness(8) };
             texTabContent.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             texTabContent.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            texTabContent.Children.Add(new TextBlock { Text = "Textures (WIP) — future implementation will allow mapping surface / texture IDs.", Margin = new Thickness(0,0,0,8) });
+            texTabContent.Children.Add(new TextBlock { Text = "Textures (WIP) — future implementation will allow mapping surface / texture IDs.", Margin = new Thickness(0, 0, 0, 8) });
             var placeholder = new TextBlock { Text = "Coming soon: Texture remapping tab.", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.6, FontStyle = FontStyles.Italic };
             Grid.SetRow(placeholder, 1); texTabContent.Children.Add(placeholder);
             var texTab = new TabItem { Header = "Textures", Content = texTabContent };
             tab.Items.Add(palTab); tab.Items.Add(texTab);
 
-            // Compose palette tab content (dock panel) now that we have all sections
             var palDock = new DockPanel();
             palDock.Children.Add(buttons);
             palDock.Children.Add(shadeGrid);
@@ -446,11 +440,9 @@ namespace ACViewer.View
             }
             else
             {
-                // initialize rows from any existing text (empty initially)
                 SyncRowsFromText();
-                SyncTextLinesFromRows(); // initial snapshot (will be empty)
+                SyncTextLinesFromRows();
             }
-            // Freeze the generated lines so they remain constant for the lifetime of the dialog
             _freezeLines = true;
             HookLiveEvents();
             UpdateBigPreviewImage();
@@ -458,6 +450,7 @@ namespace ACViewer.View
             RefreshRangeList();
             InitTextureTabData();
             PopulateSetupIds();
+            SyncRangeEditorFromRow();
         }
 
         private void HookLiveEvents()
@@ -545,7 +538,6 @@ namespace ACViewer.View
 
         private void UpdateBigPreviewImage()
         {
-            // SAFETY: guard against empty palette set (Count == 0)
             if (_currentSet != null)
             {
                 if (_currentSet.PaletteList == null || _currentSet.PaletteList.Count == 0)
@@ -585,7 +577,6 @@ namespace ACViewer.View
             }
             else
             {
-                // fallback to original logic using txtMulti caret if table empty
                 var text = txtMulti.Text; if (string.IsNullOrWhiteSpace(text)) { imgRangePreview.Source = null; return; }
                 int caret = txtMulti.CaretIndex;
                 int lineStart = text.LastIndexOf('\n', Math.Clamp(caret - 1, 0, text.Length - 1));
@@ -643,8 +634,31 @@ namespace ACViewer.View
             }
             _lstRanges.ItemsSource = items;
         }
+        #endregion
 
-        // Removed BtnColorFind_Click and Ranges_SelectionChanged handlers to stabilize build.
+        #region Range Editor Sync
+        private void SyncRangeEditorFromRow()
+        {
+            if (_rangeEditor == null) return;
+            if (_gridEntries?.SelectedItem is not PaletteEntryRow row) { _rangeEditor.SetPalette(null); _rangeEditor.SetRanges(Array.Empty<RangeDef>()); return; }
+            uint palId = row.PaletteSetId; uint actual = palId;
+            if ((palId >> 24) == 0xF)
+            {
+                try { var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(palId); if (set?.PaletteList?.Count > 0) actual = set.PaletteList[0]; } catch { }
+            }
+            Palette palette = null; try { palette = DatManager.PortalDat.ReadFromDat<Palette>(actual); } catch { }
+            _rangeEditor.SetPalette(palette);
+            var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), tolerant: true, out _);
+            _rangeEditor.SetRanges(parsed);
+        }
+
+        private void ApplyRangeEditorToSelectedRow(IReadOnlyList<RangeDef> list)
+        {
+            if (_gridEntries?.SelectedItem is not PaletteEntryRow row) return;
+            if (row.IsLocked) return;
+            row.RangesText = string.Join(",", list.Select(r => $"{r.Offset}:{r.Length}"));
+            RefreshRangeList(); UpdateRangeHighlight(); DoLiveUpdate(); if (!_freezeLines) SyncTextLinesFromRows(); _gridEntries.Items.Refresh();
+        }
         #endregion
 
         #region Event Handlers
@@ -656,23 +670,16 @@ namespace ACViewer.View
             {
                 _currentSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(id);
                 _currentSetIndex = 0;
-
-                // SAFETY: only show / configure set browse controls if there are palettes inside
                 if (_currentSet?.PaletteList != null && _currentSet.PaletteList.Count > 0)
                 {
                     panelSetBrowse.Visibility = Visibility.Visible;
                     sldSetIndex.Maximum = _currentSet.PaletteList.Count - 1;
-                    sldSetIndex.Value = 0;
-                    lblSetIndex.Text = "Set Index: 0";
+                    sldSetIndex.Value = 0; lblSetIndex.Text = "Set Index: 0";
                 }
-                else
-                {
-                    panelSetBrowse.Visibility = Visibility.Collapsed;
-                }
+                else panelSetBrowse.Visibility = Visibility.Collapsed;
             }
             else { _currentSet = null; panelSetBrowse.Visibility = Visibility.Collapsed; }
 
-            // If a row in the table is selected and not locked, update its palette ID to the clicked one
             if (_gridEntries != null && _gridEntries.SelectedItem is PaletteEntryRow row && !row.IsLocked)
             {
                 row.PaletteSetId = id;
@@ -686,6 +693,7 @@ namespace ACViewer.View
             UpdateRangeHighlight();
             RefreshRangeList();
             HighlightRangesForPalette(id);
+            SyncRangeEditorFromRow();
         }
 
         private void HighlightRangesForPalette(uint palId)
@@ -721,48 +729,14 @@ namespace ACViewer.View
         {
             var defs = CustomPaletteStore.LoadAll().ToList(); if (defs.Count == 0) { MessageBox.Show(this, "No saved presets.", "Custom Palette", MessageBoxButton.OK, MessageBoxImage.Information); return; }
             var picker = new PresetPickerWindow(defs) { Owner = this }; if (picker.ShowDialog() == true && picker.Selected != null) { ApplyLoadedPreset(picker.Selected); DoLiveUpdate(); }
+            SyncRangeEditorFromRow();
         }
         private void ApplyLoadedPreset(CustomPaletteDefinition def)
         {
             chkMulti.IsChecked = true; _rows.Clear(); foreach (var e in def.Entries) { var rtxt = string.Join(",", e.Ranges.Select(r => $"{r.Offset}:{r.Length}")); _rows.Add(new PaletteEntryRow { PaletteSetId = e.PaletteSetId, RangesText = rtxt, IsLocked = _chkLockAll.IsChecked == true }); }
-            if (!_freezeLines) SyncTextLinesFromRows(); txtShade.Text = def.Shade.ToString("0.###", CultureInfo.InvariantCulture); sldShade.Value = def.Shade; ResultDefinition = def; UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList();
-        }
-        #endregion
-
-        // ===================== ADDED REPAIR REGION (helpers & missing handlers) =====================
-        #region RepairHelpers
-        // If these methods already exist above (from earlier partial edits), they will not be duplicated because
-        // we guard with preprocessor symbols (not defined) or we simply skipped redefining. We place them only once.
-
-        // Parse helpers (re-added)
-        private static uint ParseUInt(string s)
-        {
-            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                return Convert.ToUInt32(s[2..], 16);
-            if (uint.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex))
-                return hex;
-            return uint.Parse(s, CultureInfo.InvariantCulture);
+            if (!_freezeLines) SyncTextLinesFromRows(); txtShade.Text = def.Shade.ToString("0.###", CultureInfo.InvariantCulture); sldShade.Value = def.Shade; ResultDefinition = def; UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList(); SyncRangeEditorFromRow();
         }
 
-        private static float ParseFloat(string s, float defVal)
-            => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f)
-                ? Math.Clamp(f, 0f, 1f) : defVal;
-
-        private bool TryParseColorQuery(string query, out int r, out int g, out int b)
-        {
-            r = g = b = 0; string hex = null;
-            if (query.StartsWith('#')) hex = query[1..];
-            else if (query.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) hex = query[2..];
-            else if (query.Length == 6 && query.All(Uri.IsHexDigit)) hex = query;
-            if (hex != null && hex.Length == 6 && int.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hv))
-            { r = (hv >> 16) & 0xFF; g = (hv >> 8) & 0xFF; b = hv & 0xFF; return true; }
-            if (ColorNameCatalog.TryGet(query, out var val)) { r = (val >> 16) & 0xFF; g = (val >> 8) & 0xFF; b = val & 0xFF; return true; }
-            var nearest = ColorNameCatalog.GetNearestNameBySpelling(query);
-            if (nearest != null && ColorNameCatalog.TryGet(nearest, out var nval)) { r = (nval >> 16) & 0xFF; g = (nval >> 8) & 0xFF; b = val & 0xFF; return true; }
-            return false;
-        }
-
-        // DataGrid editing handlers (re-added)
         private void GridEntries_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.Row?.Item is not PaletteEntryRow row) return;
@@ -774,6 +748,7 @@ namespace ACViewer.View
                 RefreshRangeList();
                 UpdateRangeHighlight();
                 DoLiveUpdate();
+                SyncRangeEditorFromRow();
             }
         }
 
@@ -783,7 +758,6 @@ namespace ACViewer.View
                 e.Cancel = true;
         }
 
-        // Row add / remove (re-added)
         private void AddRowFromSelection()
         {
             uint palId = 0;
@@ -798,6 +772,7 @@ namespace ACViewer.View
             UpdateRangeHighlight();
             DoLiveUpdate();
             _gridEntries.SelectedItem = newRow;
+            SyncRangeEditorFromRow();
         }
 
         private void RemoveSelectedRow()
@@ -809,38 +784,7 @@ namespace ACViewer.View
             RefreshRangeList();
             UpdateRangeHighlight();
             DoLiveUpdate();
-        }
-
-        // Sync helpers (re-added)
-        private void SyncRowsFromText()
-        {
-            _rows.Clear();
-            var text = txtMulti?.Text; if (string.IsNullOrWhiteSpace(text)) return;
-            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var line in lines)
-            {
-                var parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2) continue;
-                try
-                {
-                    uint pal = ParseUInt(parts[0]);
-                    var ranges = string.Join(" ", parts.Skip(1)).Replace(' ', ',');
-                    _rows.Add(new PaletteEntryRow { PaletteSetId = pal, RangesText = ranges });
-                }
-                catch { }
-            }
-        }
-
-        private void SyncTextLinesFromRows()
-        {
-            if (_freezeLines) return;
-            txtMulti.Text = string.Join(System.Environment.NewLine, _rows.Select(r => $"0x{r.PaletteSetId:X8} {r.RangesText.Replace(' ', ',')}"));
-        }
-
-        // Modify OnLoaded to populate setup IDs (we inject a partial override pattern)
-        private void OnLoaded_PopulateSetups_Extension()
-        {
-            PopulateSetupIds();
+            SyncRangeEditorFromRow();
         }
         #endregion
 
@@ -853,7 +797,6 @@ namespace ACViewer.View
             if (clothing == null) return;
             foreach (var id in clothing.ClothingBaseEffects.Keys.OrderBy(k => k))
                 _lstSetupIds.Items.Add(new ListBoxItem { Content = $"0x{id:X8}", Tag = id });
-            // try sync external selection
             var ext = ClothingTableList.Instance?.SetupIds;
             uint sel = 0; if (ext?.SelectedItem is ListBoxItem li) sel = (uint)li.DataContext;
             if (sel != 0)
@@ -894,6 +837,46 @@ namespace ACViewer.View
             }
             catch (Exception ex)
             { MessageBox.Show(this, $"Export failed: {ex.Message}"); }
+        }
+        #endregion
+
+        #region Helpers
+        private static uint ParseUInt(string s)
+        {
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                return Convert.ToUInt32(s[2..], 16);
+            if (uint.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex))
+                return hex;
+            return uint.Parse(s, CultureInfo.InvariantCulture);
+        }
+
+        private static float ParseFloat(string s, float defVal)
+            => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f)
+                ? Math.Clamp(f, 0f, 1f) : defVal;
+
+        private void SyncRowsFromText()
+        {
+            _rows.Clear();
+            var text = txtMulti?.Text; if (string.IsNullOrWhiteSpace(text)) return;
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) continue;
+                try
+                {
+                    uint pal = ParseUInt(parts[0]);
+                    var ranges = string.Join(" ", parts.Skip(1)).Replace(' ', ',');
+                    _rows.Add(new PaletteEntryRow { PaletteSetId = pal, RangesText = ranges });
+                }
+                catch { }
+            }
+        }
+
+        private void SyncTextLinesFromRows()
+        {
+            if (_freezeLines) return;
+            txtMulti.Text = string.Join(System.Environment.NewLine, _rows.Select(r => $"0x{r.PaletteSetId:X8} {r.RangesText.Replace(' ', ',')}"));
         }
         #endregion
     }
