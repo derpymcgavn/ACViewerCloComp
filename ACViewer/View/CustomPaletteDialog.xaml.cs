@@ -72,6 +72,7 @@ namespace ACViewer.View
         // Range editor (new feature)
         private RangeEditorControl _rangeEditor;
         private Border _rangeEditorHost;
+        private Button _btnRangeUndo; private Button _btnRangeRedo; // added undo/redo buttons
 
         // Display model for ranges
         private class RangeDisplay
@@ -364,6 +365,12 @@ namespace ACViewer.View
             gv.Columns.Add(new GridViewColumn { Header = "Palette", DisplayMemberBinding = new System.Windows.Data.Binding("PaletteHex") });
             gv.Columns.Add(new GridViewColumn { Header = "Offset:Len", DisplayMemberBinding = new System.Windows.Data.Binding("OffsetLength") });
             _lstRanges.View = gv;
+            // Context menu for splitting a range into a new palette row
+            var cm = new ContextMenu();
+            var miSplit = new MenuItem { Header = "Split range to new row" };
+            miSplit.Click += (_, __) => SplitSelectedRangeToNewRow();
+            cm.Items.Add(miSplit);
+            _lstRanges.ContextMenu = cm;
             var rngBorder = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(136, 136, 136)), BorderThickness = new Thickness(1), Child = _lstRanges }; Grid.SetColumn(rngBorder, 2); palRangeGrid.Children.Add(rngBorder);
             mainGrid.Children.Add(palRangeGrid);
 
@@ -377,15 +384,23 @@ namespace ACViewer.View
 
             // Range editor integration
             detailsStack.Children.Add(new TextBlock { Text = "Interactive Range Editor:", FontWeight = FontWeights.Bold });
-            _rangeEditor = new RangeEditorControl { Height = 44, Margin = new Thickness(0, 2, 0, 6) };
+            var rangeHeaderBar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+            _btnRangeUndo = new Button { Content = "Undo", Width = 56, Margin = new Thickness(0,0,6,0), IsEnabled = false, ToolTip = "Undo (Ctrl+Z)" };
+            _btnRangeRedo = new Button { Content = "Redo", Width = 56, Margin = new Thickness(0,0,6,0), IsEnabled = false, ToolTip = "Redo (Ctrl+Y / Ctrl+Shift+Z)" };
+            _btnRangeUndo.Click += (_, __)=> { _rangeEditor?.Undo(); UpdateRangeUndoRedoButtons(); };
+            _btnRangeRedo.Click += (_, __)=> { _rangeEditor?.Redo(); UpdateRangeUndoRedoButtons(); };
+            rangeHeaderBar.Children.Add(_btnRangeUndo); rangeHeaderBar.Children.Add(_btnRangeRedo);
+            detailsStack.Children.Add(rangeHeaderBar);
+            _rangeEditor = new RangeEditorControl { Height = 44, Margin = new Thickness(0, 0, 0, 6) };
             _rangeEditor.RangesChanged += (_, list) => ApplyRangeEditorToSelectedRow(list);
+            _rangeEditor.HistoryChanged += (_, __) => UpdateRangeUndoRedoButtons();
             _rangeEditorHost = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(90, 90, 90)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(15, 15, 15)), Child = _rangeEditor, Height = 44 };
             detailsStack.Children.Add(_rangeEditorHost);
-            detailsStack.Children.Add(new TextBlock { Text = "Drag to add (groups of 8 colors). Right-click range to remove.", FontSize = 11, Foreground = Brushes.Gray });
+            detailsStack.Children.Add(new TextBlock { Text = "Drag to add (groups of 8 colors). Shift+Drag to erase. Right-click a range to remove. (Red = active ranges)  Undo/Redo available via buttons or Ctrl+Z / Ctrl+Y.", FontSize = 11, Foreground = Brushes.Gray });
 
             panelSetBrowse = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8), Visibility = Visibility.Collapsed };
             lblSetIndex = new TextBlock { Text = "Set Index: 0", Width = 110, VerticalAlignment = VerticalAlignment.Center };
-            sldSetIndex = new Slider { Width = 260, Minimum = 0, Maximum = 0, IsSnapToTickEnabled = true, TickFrequency = 1 }; sldSetIndex.ValueChanged += sldSetIndex_ValueChanged;
+            sldSetIndex = new Slider { Width = 260, Minimum = 0, Maximum = 0, IsSnapToTickEnabled = true, TickFrequency = 1 }; sldSetIndex.ValueChanged += btnUseSetPalette_Click;
             btnUseSetPalette = new Button { Content = "Use", Width = 60 }; btnUseSetPalette.Click += btnUseSetPalette_Click;
             panelSetBrowse.Children.Add(lblSetIndex); panelSetBrowse.Children.Add(sldSetIndex); panelSetBrowse.Children.Add(btnUseSetPalette); detailsStack.Children.Add(panelSetBrowse);
 
@@ -640,7 +655,7 @@ namespace ACViewer.View
         private void SyncRangeEditorFromRow()
         {
             if (_rangeEditor == null) return;
-            if (_gridEntries?.SelectedItem is not PaletteEntryRow row) { _rangeEditor.SetPalette(null); _rangeEditor.SetRanges(Array.Empty<RangeDef>()); return; }
+            if (_gridEntries?.SelectedItem is not PaletteEntryRow row) { _rangeEditor.SetPalette(null); _rangeEditor.SetRanges(Array.Empty<RangeDef>()); UpdateRangeUndoRedoButtons(); return; }
             uint palId = row.PaletteSetId; uint actual = palId;
             if ((palId >> 24) == 0xF)
             {
@@ -650,6 +665,7 @@ namespace ACViewer.View
             _rangeEditor.SetPalette(palette);
             var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), tolerant: true, out _);
             _rangeEditor.SetRanges(parsed);
+            UpdateRangeUndoRedoButtons();
         }
 
         private void ApplyRangeEditorToSelectedRow(IReadOnlyList<RangeDef> list)
@@ -657,7 +673,9 @@ namespace ACViewer.View
             if (_gridEntries?.SelectedItem is not PaletteEntryRow row) return;
             if (row.IsLocked) return;
             row.RangesText = string.Join(",", list.Select(r => $"{r.Offset}:{r.Length}"));
+            EnforceNonOverlappingRanges(row.PaletteSetId);
             RefreshRangeList(); UpdateRangeHighlight(); DoLiveUpdate(); if (!_freezeLines) SyncTextLinesFromRows(); _gridEntries.Items.Refresh();
+            UpdateRangeUndoRedoButtons();
         }
         #endregion
 
@@ -734,7 +752,9 @@ namespace ACViewer.View
         private void ApplyLoadedPreset(CustomPaletteDefinition def)
         {
             chkMulti.IsChecked = true; _rows.Clear(); foreach (var e in def.Entries) { var rtxt = string.Join(",", e.Ranges.Select(r => $"{r.Offset}:{r.Length}")); _rows.Add(new PaletteEntryRow { PaletteSetId = e.PaletteSetId, RangesText = rtxt, IsLocked = _chkLockAll.IsChecked == true }); }
+            EnforceNonOverlappingRanges();
             if (!_freezeLines) SyncTextLinesFromRows(); txtShade.Text = def.Shade.ToString("0.###", CultureInfo.InvariantCulture); sldShade.Value = def.Shade; ResultDefinition = def; UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList(); SyncRangeEditorFromRow();
+            UpdateRangeUndoRedoButtons();
         }
 
         private void GridEntries_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
@@ -744,6 +764,7 @@ namespace ACViewer.View
             if (e.EditingElement is TextBox tb)
             {
                 row.RangesText = tb.Text.Trim();
+                EnforceNonOverlappingRanges(row.PaletteSetId);
                 SyncTextLinesFromRows();
                 RefreshRangeList();
                 UpdateRangeHighlight();
@@ -767,6 +788,7 @@ namespace ACViewer.View
             if (palId == 0) return;
             var newRow = new PaletteEntryRow { PaletteSetId = palId, RangesText = "0:1", IsLocked = _chkLockAll?.IsChecked == true };
             _rows.Add(newRow);
+            EnforceNonOverlappingRanges(palId);
             SyncTextLinesFromRows();
             RefreshRangeList();
             UpdateRangeHighlight();
@@ -779,13 +801,24 @@ namespace ACViewer.View
         {
             if (_gridEntries?.SelectedItem is not PaletteEntryRow row) return;
             if (row.IsLocked) return;
+            var palId = row.PaletteSetId;
             _rows.Remove(row);
+            EnforceNonOverlappingRanges(palId);
             SyncTextLinesFromRows();
             RefreshRangeList();
             UpdateRangeHighlight();
             DoLiveUpdate();
             SyncRangeEditorFromRow();
         }
+
+        // helper to update undo/redo button states
+        private void UpdateRangeUndoRedoButtons()
+        {
+            if (_btnRangeUndo == null || _btnRangeRedo == null || _rangeEditor == null) return;
+            _btnRangeUndo.IsEnabled = _rangeEditor.CanUndo;
+            _btnRangeRedo.IsEnabled = _rangeEditor.CanRedo;
+        }
+
         #endregion
 
         #region SetupIdPanel
@@ -879,5 +912,96 @@ namespace ACViewer.View
             txtMulti.Text = string.Join(System.Environment.NewLine, _rows.Select(r => $"0x{r.PaletteSetId:X8} {r.RangesText.Replace(' ', ',')}"));
         }
         #endregion
+
+        private void SplitSelectedRangeToNewRow()
+        {
+            if (_lstRanges?.SelectedItem is not RangeDisplay rd) return;
+            // Find the source row containing this range
+            PaletteEntryRow sourceRow = null;
+            List<RangeDef> sourceRanges = null;
+            foreach (var row in _rows)
+            {
+                if (row.PaletteSetId != rd.PaletteId) continue;
+                var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), tolerant: true, out _);
+                var match = parsed.FirstOrDefault(r => r.Offset == rd.Offset && r.Length == rd.Length);
+                if (match != null)
+                {
+                    sourceRow = row;
+                    sourceRanges = parsed;
+                    break;
+                }
+            }
+            if (sourceRow == null || sourceRanges == null) return;
+
+            var removed = sourceRanges.First(r => r.Offset == rd.Offset && r.Length == rd.Length);
+            sourceRanges.Remove(removed);
+            if (sourceRanges.Count == 0)
+            {
+                _rows.Remove(sourceRow);
+            }
+            else
+            {
+                sourceRow.RangesText = string.Join(",", sourceRanges.Select(r => $"{r.Offset}:{r.Length}"));
+            }
+
+            var newRow = new PaletteEntryRow
+            {
+                PaletteSetId = rd.PaletteId,
+                RangesText = $"{rd.Offset}:{rd.Length}",
+                IsLocked = _chkLockAll?.IsChecked == true
+            };
+            _rows.Add(newRow);
+
+            EnforceNonOverlappingRanges(rd.PaletteId);
+
+            if (!_freezeLines) SyncTextLinesFromRows();
+            RefreshRangeList();
+            _gridEntries.Items.Refresh();
+            _gridEntries.SelectedItem = newRow;
+            UpdateRangeHighlight();
+            SyncRangeEditorFromRow();
+            DoLiveUpdate();
+        }
+
+        private void EnforceNonOverlappingRanges(uint? paletteFilter = null)
+        {
+            // For each palette (or specified palette), ensure no overlapping group indices across rows.
+            var groups = _rows
+                .Where(r => !paletteFilter.HasValue || r.PaletteSetId == paletteFilter.Value)
+                .GroupBy(r => r.PaletteSetId);
+
+            foreach (var g in groups)
+            {
+                var used = new HashSet<uint>();
+                var orderedRows = g.ToList(); // maintain insertion order
+                foreach (var row in orderedRows)
+                {
+                    var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), tolerant: true, out _)
+                        .OrderBy(r => r.Offset).ToList();
+                    var rebuilt = new List<(uint off,uint len)>();
+                    foreach (var r in parsed)
+                    {
+                        for (uint i = r.Offset; i < r.Offset + r.Length; i++)
+                        {
+                            if (!used.Add(i)) continue; // skip overlapped group
+                            // extend or start new contiguous segment
+                            if (rebuilt.Count == 0 || rebuilt[^1].off + rebuilt[^1].len != i)
+                                rebuilt.Add((i,1));
+                            else
+                                rebuilt[^1] = (rebuilt[^1].off, rebuilt[^1].len + 1);
+                        }
+                    }
+                    var newText = string.Join(",", rebuilt.Select(t => $"{t.off}:{t.len}"));
+                    if (string.IsNullOrEmpty(newText))
+                        row.RangesText = string.Empty; // will be cleaned up below if empty
+                    else
+                        row.RangesText = newText;
+                }
+                // Remove any empty rows produced
+                var empty = orderedRows.Where(r => string.IsNullOrWhiteSpace(r.RangesText)).ToList();
+                foreach (var r in empty) _rows.Remove(r);
+            }
+            if (!_freezeLines) SyncTextLinesFromRows();
+        }
     }
 }

@@ -43,7 +43,7 @@ namespace ACViewer.Model
             if (!_setup.PlacementFrames.TryGetValue((int)Placement.Resting, out var placementFrames))
                 _setup.PlacementFrames.TryGetValue((int)Placement.Default, out placementFrames);
 
-            if (placementFrames != null)
+            if (placementFrames != null && placementFrames.AnimFrame?.Frames != null)
             {
                 foreach (var placementFrame in placementFrames.AnimFrame.Frames)
                     PlacementFrames.Add(placementFrame.ToXna());
@@ -92,11 +92,15 @@ namespace ACViewer.Model
 
             PlacementFrames = new List<Matrix>();
 
-            if (!_setup.PlacementFrames.TryGetValue((int)Placement.Resting, out var placementFrames))
-                _setup.PlacementFrames.TryGetValue((int)Placement.Default, out placementFrames);
+            if (!_setup.PlacementFrames.TryGetValue((int)Placement.Resting, out var placementFrames2))
+                _setup.PlacementFrames.TryGetValue((int)Placement.Default, out placementFrames2);
 
-            foreach (var placementFrame in placementFrames.AnimFrame.Frames)
-                PlacementFrames.Add(placementFrame.ToXna());
+            // Guard against null placement / animation data. If missing, leave PlacementFrames empty so GetVertices uses Matrix.Identity fallback.
+            if (placementFrames2 != null && placementFrames2.AnimFrame?.Frames != null)
+            {
+                foreach (var placementFrame in placementFrames2.AnimFrame.Frames)
+                    PlacementFrames.Add(placementFrame.ToXna());
+            }
 
             BuildBoundingBox();
         }

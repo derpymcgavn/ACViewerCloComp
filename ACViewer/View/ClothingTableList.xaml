@@ -9,14 +9,21 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height=".5*"/>
-            <RowDefinition Height=".4*"/>
-            <RowDefinition Height=".1*"/>
+            <RowDefinition Height=".35*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <ListBox Name="SetupIds" Width="170" Margin="7.5,7.5,0,0" SelectionChanged="SetupIDs_OnClick" />
         <ListBox Name="PaletteTemplates" Grid.Row="1" Width="170" Margin="7.5,7.5,0,0" SelectionChanged="PaletteTemplates_OnClick" />
-        <Grid Grid.Row="2" Margin="7.5,7.5,0,0" Width="170">
+        <!-- Shade slider & label area -->
+        <Grid Grid.Row="2" Margin="7.5,4,0,0" Width="170">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
             <Slider Name="Shades" Width="170" IsEnabled="False" ValueChanged="Shades_ValueChanged" SmallChange="1" IsSnapToTickEnabled="True" />
-            <Label x:Name="lblShade" Content="Shade: 0.1234" HorizontalAlignment="Left" Margin="0,21,0,0" VerticalAlignment="Top" Width="145"/>
+            <Label x:Name="lblShade" Grid.Row="1" Content="Shade: 0" HorizontalAlignment="Left" Margin="0,4,0,0" VerticalAlignment="Top" />
         </Grid>
+        <Button Grid.Row="3" Content="Import JSON..." Width="170" Margin="7.5,6,0,7.5" HorizontalAlignment="Left" Click="BtnImportJson_Click" />
     </Grid>
 </UserControl>

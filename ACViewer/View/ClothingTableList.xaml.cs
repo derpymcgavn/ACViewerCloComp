@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-
+using Microsoft.Win32;
 using ACE.DatLoader;
 using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
 using ACE.Entity.Enum;
 using ACViewer.CustomPalettes; // added
+using ACViewer.CustomTextures;
 
 namespace ACViewer.View
 {
@@ -103,15 +104,30 @@ namespace ACViewer.View
                 foreach (var sp in CurrentClothingItem.ClothingSubPalEffects[palTemp].CloSubPalettes)
                 {
                     var palSetID = sp.PaletteSet;
-                    var clothing = DatManager.PortalDat.ReadFromDat<PaletteSet>(palSetID);
-                    if (clothing.PaletteList.Count > maxPals) maxPals = clothing.PaletteList.Count;
+                    int count = 1; // default for a direct palette (0x04) or failure
+                    if ((palSetID >> 24) == 0x0F)
+                    {
+                        try
+                        {
+                            var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(palSetID);
+                            count = palSet.PaletteList?.Count > 0 ? palSet.PaletteList.Count : 1;
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log once per selection; treat as single variant
+                            MainWindow.Status.WriteLine($"Warning: Failed to load PaletteSet {palSetID:X8} as set ({ex.Message}). Treating as single palette.");
+                            count = 1;
+                        }
+                    }
+                    // for raw palette (0x04xxxxxx) count remains 1
+                    if (count > maxPals) maxPals = count;
                 }
                 if (maxPals > 1)
                 {
                     Shades.Maximum = maxPals - 1;
                     Shades.Visibility = Visibility.Visible;
                     Shades.IsEnabled = true;
-                    MainWindow.Status.WriteLine($"Reading PaletteSets and found {maxPals} Shade options");
+                    MainWindow.Status.WriteLine($"Found {maxPals} shade options for palette template {palTemp}.");
                 }
             }
             else _lastActualPaletteTemplate = null;
@@ -287,10 +303,58 @@ namespace ACViewer.View
             if (CurrentClothingItem.ClothingSubPalEffects.Count == 0) return result; if (!CurrentClothingItem.ClothingSubPalEffects.ContainsKey(PaletteTemplate)) return result; if (float.IsNaN(Shade)) Shade = 0;
             Icon = CurrentClothingItem.GetIcon(PaletteTemplate); var palEffects = CurrentClothingItem.ClothingSubPalEffects[PaletteTemplate];
             foreach (var subPal in palEffects.CloSubPalettes)
-            { var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(subPal.PaletteSet); var paletteID = palSet.GetPaletteID(Shade); var palette = DatManager.PortalDat.ReadFromDat<Palette>(paletteID); foreach (var r in subPal.Ranges) { uint mid = Convert.ToUInt32(r.NumColors / 2); uint colorIdx = r.Offset + mid; uint color = 0; if (palette.Colors.Count >= colorIdx) color = palette.Colors[(int)colorIdx]; result.Add(new VctInfo { PalId = paletteID & 0xFFFF, Color = color & 0xFFFFFF }); } }
+            {
+                uint paletteID;
+                Palette palette;
+                if ((subPal.PaletteSet >> 24) == 0x0F)
+                {
+                    // Proper palette set: resolve shade-specific palette
+                    var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(subPal.PaletteSet);
+                    paletteID = palSet.GetPaletteID(Shade);
+                    palette = DatManager.PortalDat.ReadFromDat<Palette>(paletteID);
+                }
+                else
+                {
+                    // Direct palette id (imported JSON can specify these): no shade selection
+                    paletteID = subPal.PaletteSet;
+                    palette = DatManager.PortalDat.ReadFromDat<Palette>(paletteID);
+                }
+
+                foreach (var r in subPal.Ranges)
+                {
+                    uint mid = Convert.ToUInt32(r.NumColors / 2); uint colorIdx = r.Offset + mid; uint color = 0;
+                    if (palette.Colors.Count >= colorIdx) color = palette.Colors[(int)colorIdx];
+                    result.Add(new VctInfo { PalId = paletteID & 0xFFFF, Color = color & 0xFFFFFF });
+                }
+            }
             return result;
         }
 
         public static uint GetIcon() => CurrentClothingItem.GetIcon(PaletteTemplate);
+
+        private void BtnImportJson_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog { Filter = "Clothing JSON (*.json)|*.json", Title = "Import Clothing Table JSON" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var imported = CustomTextureStore.ImportClothingTable(dlg.FileName);
+                if (imported == null || imported.ClothingBaseEffects.Count == 0)
+                { MessageBox.Show("Imported file contained no clothing base effects.", "Import", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                CurrentClothingItem = imported;
+                SetupIds.Items.Clear(); PaletteTemplates.Items.Clear(); ResetShadesSlider(); _customActive = false; _lastActualPaletteTemplate = null;
+                foreach (var cbe in imported.ClothingBaseEffects.Keys.OrderBy(i => i))
+                    SetupIds.Items.Add(new ListBoxItem { Content = cbe.ToString("X8"), DataContext = cbe });
+                PaletteTemplates.Items.Add(new ListBoxItem { Content = "None", DataContext = (uint)0 });
+                foreach (var subPal in imported.ClothingSubPalEffects.Keys.OrderBy(i => i))
+                    PaletteTemplates.Items.Add(new ListBoxItem { Content = (PaletteTemplate)subPal + " - " + subPal, DataContext = subPal });
+                PaletteTemplates.Items.Add(new ListBoxItem { Content = "Custom...", DataContext = CustomPaletteKey });
+                if (SetupIds.Items.Count > 0) SetupIds.SelectedIndex = 0; if (PaletteTemplates.Items.Count > 0) PaletteTemplates.SelectedIndex = 0;
+                LoadModelWithClothingBase();
+                MainWindow.Status.WriteLine($"Imported clothing JSON: {System.IO.Path.GetFileName(dlg.FileName)}");
+            }
+            catch (Exception ex)
+            { MessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
     }
 }

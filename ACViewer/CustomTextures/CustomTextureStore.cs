@@ -4,6 +4,8 @@ using System.Linq;
 using Newtonsoft.Json;
 using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
+using System;
+using System.Reflection;
 
 namespace ACViewer.CustomTextures
 {
@@ -61,7 +63,7 @@ namespace ACViewer.CustomTextures
                     }
                     subOut.CloSubPalettes.Add(spOut);
                 }
-                export.ClothingSubPalEffects[$"{kvp.Key}"] = subOut; // palette template numeric key
+                export.ClothingSubPalEffects[$"{kvp.Key}"] = subOut; // palette template numeric key (decimal)
             }
 
             // add custom texture overrides if provided
@@ -79,6 +81,108 @@ namespace ACViewer.CustomTextures
             }
 
             File.WriteAllText(path, JsonConvert.SerializeObject(export, Formatting.Indented));
+        }
+
+        // New: Import clothing table JSON into ClothingTable instance
+        public static ClothingTable ImportClothingTable(string path)
+        {
+            if (!File.Exists(path)) throw new FileNotFoundException("Clothing JSON not found", path);
+            ClothingExport export;
+            try { export = JsonConvert.DeserializeObject<ClothingExport>(File.ReadAllText(path)); }
+            catch (Exception ex) { throw new InvalidDataException("Failed to parse JSON", ex); }
+            if (export == null) throw new InvalidDataException("Empty JSON");
+
+            var table = new ClothingTable();
+            if (!string.IsNullOrWhiteSpace(export.Id))
+            {
+                try
+                {
+                    uint idVal = ParseUInt(export.Id);
+                    var prop = typeof(ACE.DatLoader.FileTypes.FileType).GetProperty("Id", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    prop?.SetValue(table, idVal, null);
+                }
+                catch { }
+            }
+
+            // Reflection helpers for private set properties
+            var cloObjIndexProp = typeof(CloObjectEffect).GetProperty("Index", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var cloObjModelProp = typeof(CloObjectEffect).GetProperty("ModelId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var cloTexOldProp = typeof(CloTextureEffect).GetProperty("OldTexture", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var cloTexNewProp = typeof(CloTextureEffect).GetProperty("NewTexture", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var subIconProp = typeof(CloSubPalEffect).GetProperty("Icon", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            // Base effects
+            foreach (var kvp in export.ClothingBaseEffects)
+            {
+                uint setupId; try { setupId = ParseUInt(kvp.Key); } catch { continue; }
+                var baseEffect = new ClothingBaseEffect();
+                foreach (var obj in kvp.Value.CloObjectEffects)
+                {
+                    var objEff = new CloObjectEffect();
+                    try { cloObjIndexProp?.SetValue(objEff, ParseUInt(obj.Index)); } catch { }
+                    try { cloObjModelProp?.SetValue(objEff, ParseUInt(obj.ModelId)); } catch { }
+                    foreach (var tex in obj.CloTextureEffects)
+                    {
+                        var texEff = new CloTextureEffect();
+                        try { cloTexOldProp?.SetValue(texEff, ParseUInt(tex.OldTexture)); } catch { }
+                        try { cloTexNewProp?.SetValue(texEff, ParseUInt(tex.NewTexture)); } catch { }
+                        objEff.CloTextureEffects.Add(texEff);
+                    }
+                    baseEffect.CloObjectEffects.Add(objEff);
+                }
+                if (!table.ClothingBaseEffects.ContainsKey(setupId))
+                    table.ClothingBaseEffects.Add(setupId, baseEffect);
+            }
+
+            // Sub palette effects
+            foreach (var kvp in export.ClothingSubPalEffects)
+            {
+                uint palTemplate; try { palTemplate = ParseUInt(kvp.Key); } catch { continue; }
+                var subEffect = new CloSubPalEffect();
+                try { subIconProp?.SetValue(subEffect, ParseUInt(kvp.Value.Icon)); } catch { }
+                foreach (var sp in kvp.Value.CloSubPalettes)
+                {
+                    var spDef = new CloSubPalette();
+                    try { spDef.PaletteSet = ParseUInt(sp.PaletteSet); } catch { continue; }
+                    foreach (var r in sp.Ranges)
+                    {
+                        try
+                        {
+                            var offRaw = ParseUInt(r.Offset);
+                            var lenRaw = ParseUInt(r.NumColors);
+                            // Enforce multiples of 8 (palette groups). Round down to nearest valid boundary.
+                            if (offRaw % 8 != 0) offRaw -= offRaw % 8;
+                            if (lenRaw % 8 != 0) lenRaw -= lenRaw % 8;
+                            if (lenRaw == 0) continue; // skip invalid after adjustment
+                            spDef.Ranges.Add(new CloSubPaletteRange
+                            {
+                                Offset = offRaw,
+                                NumColors = lenRaw
+                            });
+                        }
+                        catch { }
+                    }
+                    if (spDef.Ranges.Count > 0)
+                        subEffect.CloSubPalettes.Add(spDef);
+                }
+                if (subEffect.CloSubPalettes.Count > 0 || (uint)subIconProp?.GetValue(subEffect) != 0)
+                {
+                    if (!table.ClothingSubPalEffects.ContainsKey(palTemplate))
+                        table.ClothingSubPalEffects.Add(palTemplate, subEffect);
+                }
+            }
+
+            return table;
+        }
+
+        private static uint ParseUInt(string s)
+        {
+            // Adapted: if value starts with 0x treat as hexadecimal, otherwise treat as decimal (previously assumed hex always).
+            if (string.IsNullOrWhiteSpace(s)) return 0;
+            s = s.Trim();
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                return Convert.ToUInt32(s.Substring(2), 16);
+            return Convert.ToUInt32(s, 10);
         }
     }
 }
