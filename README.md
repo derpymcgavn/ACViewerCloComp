@@ -40,6 +40,10 @@ Enhanced fork of ACViewer focused on clothing coloration, palette composition, t
 - Offset / Length Validation (Import)
   - All imported offsets & lengths snapped to 8?color boundaries; invalid fragments politely ignored.
 
+## Recent Fixes
+- Fixed ArgumentOutOfRangeException during PFID_INDEX16 texture decoding (TextureCache.IndexToColor): palette indices were previously read as signed Int16 causing negative values for entries >= 32768 and occasional out?of?range lookups. Now read as UInt16, with defensive bounds checks on palette replacement ranges and per?pixel lookup (out?of?range pixels render transparent instead of crashing).
+- Added safeguards when applying clothing sub?palette ranges so malformed or oversized ranges cannot corrupt palette data.
+
 ## Usage TL;DR
 1. Pick clothing (File Type 0x10). Click "Custom...".
 2. Add / remove rows, click palettes on the left to bind them to selected row.

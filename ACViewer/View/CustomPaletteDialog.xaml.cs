@@ -20,6 +20,7 @@ using ACViewer.Model;
 using ACE.Entity.Enum;
 using Microsoft.Win32;
 using ACViewer.View.Controls; // added for RangeEditorControl
+using System.Windows.Threading; // added for disco mode
 
 namespace ACViewer.View
 {
@@ -111,6 +112,20 @@ namespace ACViewer.View
         private List<uint> _availableTextureIds = new();
         private ListBox lstTextures; private DataGrid gridTextures; private CheckBox chkTexLockAll; private Button btnTexAdd; private Button btnTexRemove; private Button btnTexSave; private Button btnTexLoad; private Button btnTexOk; private TextBox txtTexSearch; private System.Windows.Controls.Image imgTexPreviewOld; private System.Windows.Controls.Image imgTexPreviewNew; private TabControl _tabControl;
 
+        // Add new copy JSON button
+        private Button _btnCopyJson;
+
+        // Disco mode state (Alt+F4 easter egg)
+        private bool _discoMode;
+        private DispatcherTimer _discoTimer;
+        private List<uint> _discoTemplates;
+        private int _discoPointer;
+        private double _discoShade;
+        private int _discoShadeDir = 1;
+        private uint _discoOriginalTemplate;
+        private float _discoOriginalShade;
+        private bool _discoOriginalSaved;
+
         public CustomPaletteDialog()
         {
             Title = "Custom Palette";
@@ -120,6 +135,8 @@ namespace ACViewer.View
             ResizeMode = ResizeMode.CanResize;
             Content = BuildUI();
             Loaded += OnLoaded;
+            PreviewKeyDown += CustomPaletteDialog_PreviewKeyDown; // hook for easter egg
+            Closing += (_, __) => StopDiscoMode();
         }
 
         #region UI Build
@@ -178,7 +195,8 @@ namespace ACViewer.View
             var rowButtons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
             btnTexAdd = new Button { Content = "Add", Width = 60, Margin = new Thickness(0, 0, 6, 0) }; btnTexAdd.Click += (_, __) => AddTextureRow();
             btnTexRemove = new Button { Content = "Remove", Width = 70 }; btnTexRemove.Click += (_, __) => RemoveTextureRow();
-            rowButtons.Children.Add(btnTexAdd); rowButtons.Children.Add(btnTexRemove); tableStack.Children.Add(rowButtons);
+            var btnTexCopyJson = new Button { Content = "Copy JSON", Width = 90, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Copy CloSubPalettes JSON snippet for current table" }; btnTexCopyJson.Click += (_, __) => CopyCurrentPaletteRowsJson();
+            rowButtons.Children.Add(btnTexAdd); rowButtons.Children.Add(btnTexRemove); rowButtons.Children.Add(btnTexCopyJson); tableStack.Children.Add(rowButtons);
             tableStack.Children.Add(new TextBlock { Text = "Preview (Old / New)", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 4, 0, 2) });
             var prevGrid = new Grid(); prevGrid.ColumnDefinitions.Add(new ColumnDefinition()); prevGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); prevGrid.ColumnDefinitions.Add(new ColumnDefinition());
             imgTexPreviewOld = new System.Windows.Controls.Image { Height = 96, Stretch = Stretch.Uniform };
@@ -418,7 +436,12 @@ namespace ACViewer.View
             var colPal = new DataGridTextColumn { Header = "Palette/Set ID", Binding = new System.Windows.Data.Binding("PaletteHex") { Mode = System.Windows.Data.BindingMode.OneWay } };
             var colRanges = new DataGridTextColumn { Header = "Ranges (off:len,...)" , Binding = new System.Windows.Data.Binding("RangesText") { Mode = System.Windows.Data.BindingMode.TwoWay, UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.Explicit } };
             _gridEntries.Columns.Add(colLock); _gridEntries.Columns.Add(colPal); _gridEntries.Columns.Add(colRanges); panelMulti.Children.Add(_gridEntries);
-            var rowBtnPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) }; _btnAddRow = new Button { Content = "Add", Width = 60, Margin = new Thickness(0, 0, 6, 0) }; _btnAddRow.Click += (_, __) => AddRowFromSelection(); _btnRemoveRow = new Button { Content = "Remove", Width = 70 }; _btnRemoveRow.Click += (_, __) => RemoveSelectedRow(); rowBtnPanel.Children.Add(_btnAddRow); rowBtnPanel.Children.Add(_btnRemoveRow); panelMulti.Children.Add(rowBtnPanel);
+            var rowBtnPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+            _btnAddRow = new Button { Content = "Add", Width = 60, Margin = new Thickness(0, 0, 6, 0) }; _btnAddRow.Click += (_, __) => AddRowFromSelection();
+            _btnRemoveRow = new Button { Content = "Remove", Width = 70 }; _btnRemoveRow.Click += (_, __) => RemoveSelectedRow();
+            _btnCopyJson = new Button { Content = "Copy JSON", Width = 90, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Copy CloSubPalettes JSON snippet for current table" };
+            _btnCopyJson.Click += (_, __) => CopyCurrentPaletteRowsJson();
+            rowBtnPanel.Children.Add(_btnAddRow); rowBtnPanel.Children.Add(_btnRemoveRow); rowBtnPanel.Children.Add(_btnCopyJson); panelMulti.Children.Add(rowBtnPanel);
             panelMulti.Children.Add(new TextBlock { Text = "Generated Lines (read-only):" }); txtMulti = new TextBox { AcceptsReturn = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinLines = 4, IsReadOnly = true }; panelMulti.Children.Add(txtMulti);
             panelMulti.Children.Add(new TextBlock { Text = "Line Highlight Preview:" }); imgRangePreview = new System.Windows.Controls.Image { Height = 64, Stretch = Stretch.Fill, SnapsToDevicePixels = true }; panelMulti.Children.Add(new Border { Margin = new Thickness(0, 4, 0, 0), BorderBrush = new SolidColorBrush(Color.FromRgb(90, 90, 90)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(20, 20, 20)), Height = 64, Child = imgRangePreview }); detailsStack.Children.Add(panelMulti);
 
@@ -911,6 +934,91 @@ namespace ACViewer.View
             if (_freezeLines) return;
             txtMulti.Text = string.Join(System.Environment.NewLine, _rows.Select(r => $"0x{r.PaletteSetId:X8} {r.RangesText.Replace(' ', ',')}"));
         }
+
+        private void CopyCurrentPaletteRowsJson()
+        {
+            try
+            {
+                if (_rows == null || _rows.Count == 0)
+                {
+                    Clipboard.SetText("// No rows to export");
+                    MessageBox.Show(this, "No rows to export.", "Copy JSON", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // PaletteTemplate selected in main clothing list (defaults to 0 if 'None')
+                var templateId = ClothingTableList.PaletteTemplate;
+                var icon = ClothingTableList.CurrentClothingItem?.GetIcon(templateId) ?? 0u;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendFormat("\"{0}\": {{\n  \"Icon\": \"0x{1:X8}\",\n  \"CloSubPalettes\": [\n", templateId, icon);
+
+                int paletteIndex = 0;
+                foreach (var row in _rows)
+                {
+                    // Skip empty
+                    if (string.IsNullOrWhiteSpace(row.RangesText))
+                        continue;
+
+                    sb.Append("    {\n");
+                    sb.AppendFormat("      \"PaletteSet\": \"0x{0:X8}\",\n", row.PaletteSetId);
+                    sb.Append("      \"Ranges\": [\n");
+
+                    // Parse ranges: off:len (group units). Convert to raw color offsets (#colors = len * 8)
+                    var tokens = row.RangesText
+                        .Replace('\n', ' ')
+                        .Replace('\r', ' ')
+                        .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    int rangeIndex = 0;
+                    foreach (var t in tokens)
+                    {
+                        var parts = t.Split(':');
+                        if (parts.Length != 2) continue;
+
+                        if (!uint.TryParse(parts[0], System.Globalization.NumberStyles.Integer,
+                                System.Globalization.CultureInfo.InvariantCulture, out var groupOff))
+                            continue;
+                        if (!uint.TryParse(parts[1], System.Globalization.NumberStyles.Integer,
+                                System.Globalization.CultureInfo.InvariantCulture, out var groupLen))
+                            continue;
+
+                        // Convert group units (8-color groups) to raw indices / counts
+                        uint rawOffset = groupOff * 8;
+                        uint rawNumColors = groupLen * 8;
+
+                        // Format: always hex padded 8 (unless not multiple-of-8, which shouldn't happen due to enforcement)
+                        string offStr = $"0x{rawOffset:X8}";
+                        string lenStr = $"0x{rawNumColors:X8}";
+
+                        sb.Append("        {\n");
+                        sb.AppendFormat("          \"Offset\": \"{0}\",\n", offStr);
+                        sb.AppendFormat("          \"NumColors\": \"{0}\"\n", lenStr);
+                        sb.Append("        }");
+                        rangeIndex++;
+                        if (rangeIndex < tokens.Length) sb.Append(",");
+                        sb.Append("\n");
+                    }
+
+                    sb.Append("      ]\n");
+                    sb.Append("    }");
+                    paletteIndex++;
+                    if (paletteIndex < _rows.Count) sb.Append(",");
+                    sb.Append("\n");
+                }
+
+                sb.Append("  ]\n}");
+                var json = sb.ToString();
+
+                Clipboard.SetText(json);
+                MessageBox.Show(this, "JSON copied to clipboard.", "Copy JSON", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                Clipboard.SetText("// Error generating JSON: " + ex.Message);
+                MessageBox.Show(this, "Failed to generate JSON: " + ex.Message, "Copy JSON", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
         #endregion
 
         private void SplitSelectedRangeToNewRow()
@@ -1002,6 +1110,93 @@ namespace ACViewer.View
                 foreach (var r in empty) _rows.Remove(r);
             }
             if (!_freezeLines) SyncTextLinesFromRows();
+        }
+
+        // Disco mode easter egg - CTRL+F4 toggles disco mode, cycling through palette templates and shades
+        private void CustomPaletteDialog_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.F4 && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Alt) != 0)
+            {
+                // intercept default close behavior
+                e.Handled = true;
+                if (_discoMode) StopDiscoMode(); else StartDiscoMode();
+            }
+        }
+
+        private void StartDiscoMode()
+        {
+            var clothing = ClothingTableList.CurrentClothingItem;
+            if (clothing == null || clothing.ClothingSubPalEffects.Count == 0) return;
+
+            if (!_discoOriginalSaved)
+            {
+                _discoOriginalTemplate = ClothingTableList.PaletteTemplate;
+                _discoOriginalShade = ClothingTableList.Shade;
+                _discoOriginalSaved = true;
+            }
+
+            _discoTemplates = clothing.ClothingSubPalEffects.Keys.OrderBy(k => k).ToList();
+            if (_discoTemplates.Count == 0) return;
+
+            _discoPointer = 0;
+            _discoShade = 0.0;
+            _discoShadeDir = 1;
+
+            _discoTimer ??= new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = TimeSpan.FromMilliseconds(180)
+            };
+            _discoTimer.Tick -= DiscoTick;
+            _discoTimer.Tick += DiscoTick;
+            _discoMode = true;
+            _discoTimer.Start();
+            MainWindow.Instance?.Status?.WriteLine("DISCO: engaged (Alt+F4 again to stop)");
+        }
+
+        private void StopDiscoMode()
+        {
+            if (!_discoMode) return;
+            _discoMode = false;
+            _discoTimer?.Stop();
+            var clothing = ClothingTableList.CurrentClothingItem;
+            if (clothing != null)
+            {
+                try
+                {
+                    uint setupId = 0x02000001;
+                    var setupList = ClothingTableList.Instance?.SetupIds;
+                    if (setupList?.SelectedItem is ListBoxItem li) setupId = (uint)li.DataContext;
+                    ModelViewer.Instance.LoadModel(setupId, clothing, (PaletteTemplate)_discoOriginalTemplate, _discoOriginalShade);
+                }
+                catch { }
+            }
+            MainWindow.Instance?.Status?.WriteLine("DISCO: stopped");
+        }
+
+        private void DiscoTick(object? sender, EventArgs e)
+        {
+            if (!_discoMode) return;
+            var clothing = ClothingTableList.CurrentClothingItem;
+            if (clothing == null || clothing.ClothingSubPalEffects.Count == 0)
+            { StopDiscoMode(); return; }
+
+            // Refresh templates if clothing changed
+            if (_discoTemplates == null || _discoTemplates.Count == 0)
+                _discoTemplates = clothing.ClothingSubPalEffects.Keys.OrderBy(k => k).ToList();
+            if (_discoTemplates.Count == 0) { StopDiscoMode(); return; }
+
+            var templateId = _discoTemplates[_discoPointer % _discoTemplates.Count];
+            _discoPointer++;
+
+            _discoShade += _discoShadeDir * 0.08;
+            if (_discoShade >= 1.0) { _discoShade = 1.0; _discoShadeDir = -1; }
+            else if (_discoShade <= 0.0) { _discoShade = 0.0; _discoShadeDir = 1; }
+
+            uint setupId = 0x02000001;
+            var setupList = ClothingTableList.Instance?.SetupIds;
+            if (setupList?.SelectedItem is ListBoxItem li) setupId = (uint)li.DataContext;
+            try { ModelViewer.Instance.LoadModel(setupId, clothing, (PaletteTemplate)templateId, (float)_discoShade); }
+            catch { }
         }
     }
 }

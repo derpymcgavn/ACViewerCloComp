@@ -127,6 +127,25 @@ namespace ACViewer
             MainWindow.Status.WriteLine($"Loading {setupID:X8} with CUSTOM palettes count={customSubPalettes?.Count} Shade {shade}");
         }
 
+        /// <summary>
+        /// Load a model with an imported / in-memory ClothingTable instance (not necessarily present in DAT files)
+        /// </summary>
+        public void LoadModelImported(uint setupID, ClothingTable importedClothing, PaletteTemplate paletteTemplate, float shade)
+        {
+            TextureCache.Init();
+            GfxObjMode = false;
+            var objDesc = new ACViewer.Model.ObjDesc(setupID);
+            objDesc.AddFromInstance(importedClothing, paletteTemplate, shade);
+            Setup = new SetupInstance(setupID, objDesc);
+            if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
+            {
+                InitObject(setupID);
+                Camera.InitModel(Setup.Setup.BoundingBox);
+            }
+            ModelType = ModelType.Setup;
+            MainWindow.Status.WriteLine($"Loading (imported) {setupID:X8} with ClothingBase {importedClothing.Id:X8}, PaletteTemplate {paletteTemplate}, Shade {shade}");
+        }
+
         public void LoadEnvironment(uint envID)
         {
             ViewObject = null;

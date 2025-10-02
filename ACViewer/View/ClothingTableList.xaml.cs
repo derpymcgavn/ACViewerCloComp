@@ -28,6 +28,7 @@ namespace ACViewer.View
         private static List<CloSubPalette> _customCloSubPalettes;
         private static float _customShade;
         private static uint? _lastActualPaletteTemplate;
+        private static bool _importedCurrent; // indicates CurrentClothingItem came from JSON import
 
         public ClothingTableList()
         {
@@ -44,6 +45,7 @@ namespace ACViewer.View
             ResetShadesSlider();
             _customActive = false;
             _lastActualPaletteTemplate = null;
+            _importedCurrent = false;
 
             if (CurrentClothingItem.ClothingBaseEffects.Count == 0) return;
 
@@ -272,7 +274,10 @@ namespace ACViewer.View
             { shade = (float)(Shades.Value / Shades.Maximum); if (float.IsNaN(shade)) shade = 0; }
             Shade = shade; lblShade.Visibility = Shades.Visibility; lblShade.Content = "Shade: " + shade.ToString();
             var paletteTemplate = (PaletteTemplate)(uint)((ListBoxItem)PaletteTemplates.SelectedItem).DataContext;
-            ModelViewer.LoadModel(setupId, CurrentClothingItem, paletteTemplate, shade);
+            if (_importedCurrent)
+                ModelViewer.LoadModelImported(setupId, CurrentClothingItem, paletteTemplate, shade);
+            else
+                ModelViewer.LoadModel(setupId, CurrentClothingItem, paletteTemplate, shade);
         }
 
         private void Shades_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -342,6 +347,7 @@ namespace ACViewer.View
                 if (imported == null || imported.ClothingBaseEffects.Count == 0)
                 { MessageBox.Show("Imported file contained no clothing base effects.", "Import", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
                 CurrentClothingItem = imported;
+                _importedCurrent = true;
                 SetupIds.Items.Clear(); PaletteTemplates.Items.Clear(); ResetShadesSlider(); _customActive = false; _lastActualPaletteTemplate = null;
                 foreach (var cbe in imported.ClothingBaseEffects.Keys.OrderBy(i => i))
                     SetupIds.Items.Add(new ListBoxItem { Content = cbe.ToString("X8"), DataContext = cbe });

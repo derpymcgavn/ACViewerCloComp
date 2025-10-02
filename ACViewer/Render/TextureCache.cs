@@ -333,7 +333,12 @@ namespace ACViewer.Render
                         var numColors = (int)range.NumColors;
 
                         for (var j = 0; j < numColors; j++)
-                            paletteColors[j + offset] = newPalette.Colors[j + offset];
+                        {
+                            var targetIndex = j + offset;
+                            if (targetIndex < 0 || targetIndex >= paletteColors.Count || targetIndex >= newPalette.Colors.Count)
+                                continue; // safety guard
+                            paletteColors[targetIndex] = newPalette.Colors[targetIndex];
+                        }
                     }
                 }
             }
@@ -346,6 +351,17 @@ namespace ACViewer.Render
                 {
                     int idx = (i * texture.Width) + j;
                     var color = colors[idx];
+
+                    if (color < 0 || color >= paletteColors.Count)
+                    {
+                        // Out of range palette index - make pixel transparent to avoid exception
+                        output[idx * 4] = 0;
+                        output[idx * 4 + 1] = 0;
+                        output[idx * 4 + 2] = 0;
+                        output[idx * 4 + 3] = 0;
+                        continue;
+                    }
+
                     var paletteColor = paletteColors[color];
 
                     byte a = Convert.ToByte((paletteColor & 0xFF000000) >> 24);
@@ -367,12 +383,14 @@ namespace ACViewer.Render
 
         private static List<int> GetColors(ACE.DatLoader.FileTypes.Texture texture)
         {
-            var colors = new List<int>();
+            // For PFID_INDEX16 textures the indices are unsigned 16-bit values. Using ReadInt16 could
+            // produce negative numbers for indices >= 32768 leading to out-of-range palette lookups.
+            var colors = new List<int>(texture.Width * texture.Height);
             using (BinaryReader reader = new BinaryReader(new MemoryStream(texture.SourceData)))
             {
                 for (uint y = 0; y < texture.Height; y++)
                     for (uint x = 0; x < texture.Width; x++)
-                        colors.Add(reader.ReadInt16());
+                        colors.Add(reader.ReadUInt16()); // read as unsigned
             }
             return colors;
         }

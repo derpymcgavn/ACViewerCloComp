@@ -20,21 +20,41 @@ namespace ACViewer.Model
         public PaletteChanges PaletteChanges { get; set; }
         public Dictionary<uint, PartChange> PartChanges { get; set; }
 
+        // NEW: lightweight ctor so callers can decide how to supply clothing data (dat vs imported instance)
+        public ObjDesc(uint setupID)
+        {
+            SetupId = setupID;
+        }
+
         public ObjDesc(uint setupID, uint clothingTableID, PaletteTemplate paletteTemplate = PaletteTemplate.Undef, float shade = 0.0f)
         {
             SetupId = setupID;
-            
             Add(clothingTableID, paletteTemplate, shade);
         }
 
         public void Add(uint clothingTableID, PaletteTemplate paletteTemplate = PaletteTemplate.Undef, float shade = 0.0f)
         {
-            var clothingTable = DatManager.PortalDat.ReadFromDat<ClothingTable>(clothingTableID);
+            ClothingTable clothingTable = null;
+            try { clothingTable = DatManager.PortalDat.ReadFromDat<ClothingTable>(clothingTableID); } catch { clothingTable = null; }
+            if (clothingTable == null) return; // fail silently (imported JSON not in DAT) – caller should use AddFromInstance
+            ApplyClothingTable(clothingTable, paletteTemplate, shade);
+        }
 
+        /// <summary>
+        /// Apply clothing changes from an in-memory ClothingTable instance (e.g. imported JSON not present in DAT files).
+        /// </summary>
+        public void AddFromInstance(ClothingTable clothingTable, PaletteTemplate paletteTemplate = PaletteTemplate.Undef, float shade = 0.0f)
+        {
+            if (clothingTable == null) return;
+            ApplyClothingTable(clothingTable, paletteTemplate, shade);
+        }
+
+        private void ApplyClothingTable(ClothingTable clothingTable, PaletteTemplate paletteTemplate, float shade)
+        {
             if (!clothingTable.ClothingBaseEffects.TryGetValue(SetupId, out var baseEffect)) return;
 
-            // palette changes
-            if (clothingTable.ClothingSubPalEffects.TryGetValue((uint)paletteTemplate, out var palEffect))
+            // palette changes (skip if paletteTemplate is Undef or not present)
+            if (paletteTemplate != PaletteTemplate.Undef && clothingTable.ClothingSubPalEffects.TryGetValue((uint)paletteTemplate, out var palEffect))
             {
                 if (PaletteChanges == null)
                     PaletteChanges = new PaletteChanges(palEffect.CloSubPalettes, shade);
