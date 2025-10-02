@@ -438,7 +438,8 @@ namespace ACViewer.View
                 "Deep Dark",
                 "Grey",
                 "Light",
-                "Soft Dark"
+                "Soft Dark",
+                "Vibrant Neon" // new theme
             };
         }
     }
