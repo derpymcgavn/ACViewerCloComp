@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -8,6 +9,7 @@ using MonoGame.Framework.WpfInterop.Input;
 
 using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
+using ACE.DatLoader.Entity; // added for CloSubPalette
 using ACE.Entity.Enum;
 
 using ACE.Server.Physics.Animation;
@@ -81,7 +83,7 @@ namespace ACViewer
             GfxObjMode = false;
 
             // create the ObjDesc, describing any changes to palettes / textures / gfxobj parts
-            var objDesc = new ObjDesc(setupID, clothingBase.Id, paletteTemplate, shade);
+            var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase.Id, paletteTemplate, shade); // disambiguated
 
             Setup = new SetupInstance(setupID, objDesc);
 
@@ -95,6 +97,34 @@ namespace ACViewer
             ModelType = ModelType.Setup;
 
             MainWindow.Status.WriteLine($"Loading {setupID:X8} with ClothingBase {clothingBase.Id:X8}, PaletteTemplate {paletteTemplate}, and Shade {shade}");
+        }
+
+        // added custom palette loader
+        public void LoadModelCustom(uint setupID, ClothingTable clothingBase, List<CloSubPalette> customSubPalettes, float shade)
+        {
+            TextureCache.Init();
+
+            // assumed to be in Setup mode for ClothingBase
+            GfxObjMode = false;
+
+            // create the ObjDesc, describing any changes to palettes / textures / gfxobj parts
+            var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase.Id, PaletteTemplate.Undef, 0.0f);
+            if (customSubPalettes != null && customSubPalettes.Count > 0)
+            {
+                objDesc.PaletteChanges = new PaletteChanges(customSubPalettes, shade);
+            }
+            Setup = new SetupInstance(setupID, objDesc);
+
+            if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
+            {
+                InitObject(setupID);
+
+                Camera.InitModel(Setup.Setup.BoundingBox);
+            }
+
+            ModelType = ModelType.Setup;
+
+            MainWindow.Status.WriteLine($"Loading {setupID:X8} with CUSTOM palettes count={customSubPalettes?.Count} Shade {shade}");
         }
 
         public void LoadEnvironment(uint envID)
@@ -148,7 +178,7 @@ namespace ACViewer
                 ViewObject.DoMotion(motionCommand);
         }
 
-        public void Update(GameTime time)
+        public void Update(Microsoft.Xna.Framework.GameTime time)
         {
             if (ViewObject != null)
                 ViewObject.Update(time);
@@ -181,7 +211,7 @@ namespace ACViewer
             }
         }
 
-        public void Draw(GameTime time)
+        public void Draw(Microsoft.Xna.Framework.GameTime time)
         {
             Effect.CurrentTechnique = Effect.Techniques["TexturedNoShading"];
             Effect.Parameters["xWorld"].SetValue(Matrix.Identity);

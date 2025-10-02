@@ -19,27 +19,20 @@
             <Image x:Name="imgIcon" HorizontalAlignment="Center" Height="32" VerticalAlignment="Top" Width="32" Source="../Icons/plume.png" Canvas.Left="217" Canvas.Top="4"/>
             <Label x:Name="lblName" Content="Armor Name" Canvas.Left="10" Canvas.Top="7" HorizontalAlignment="Left" VerticalAlignment="Center" Width="195"/>
         </Canvas>
-        <DataGrid x:Name="dgVCT" Grid.Row="1" CanUserReorderColumns="False" CanUserSortColumns="False">
+        <!-- Make DataGrid read-only and bind to ItemsSource set in code-behind -->
+        <DataGrid x:Name="dgVCT" Grid.Row="1" CanUserReorderColumns="False" CanUserSortColumns="False" IsReadOnly="True" AutoGenerateColumns="False">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Slot" Binding="{Binding Path=slot}" IsReadOnly="True" Width="1*" CanUserSort="False" CanUserReorder="False"/>
-                <DataGridTextColumn Header="Palette ID" Binding="{Binding Path=palID}" IsReadOnly="True" Width="1*" CanUserSort="False" CanUserReorder="False"/>
-                <DataGridTextColumn Header="Color" Binding="{Binding Path=color}" IsReadOnly="True" Width="1*" CanUserSort="False" CanUserReorder="False"/>
-                <DataGridTextColumn Header="Swatch">
-                    <DataGridTextColumn.CellStyle>
-                        <Style TargetType="DataGridCell">
-                            <Setter Property="BorderThickness" Value="0" />
-                        </Style>
-                    </DataGridTextColumn.CellStyle>
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Background">
-                                <Setter.Value>
-                                    <SolidColorBrush Color="{Binding Path=swatchColor}"/>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                <DataGridTextColumn Header="Slot" Binding="{Binding Path=slot}" Width="1*" CanUserSort="False" CanUserReorder="False"/>
+                <DataGridTextColumn Header="Palette ID" Binding="{Binding Path=palID}" Width="1*" CanUserSort="False" CanUserReorder="False"/>
+                <DataGridTextColumn Header="Color" Binding="{Binding Path=color}" Width="1*" CanUserSort="False" CanUserReorder="False"/>
+                <!-- Swatch column now a template so no edit attempts occur -->
+                <DataGridTemplateColumn Header="Swatch" Width="1*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Background="{Binding swatchColor}" BorderThickness="0" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
         <Canvas Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,0" Grid.RowSpan="2">

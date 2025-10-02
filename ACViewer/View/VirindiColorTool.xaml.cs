@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
+using System.Collections.ObjectModel;
 
 using ACViewer.Data;
 using ACE.DatLoader;
@@ -17,28 +18,29 @@ namespace ACViewer.View
     /// </summary>
     public partial class VirindiColorTool : Window
     {
+        private readonly ObservableCollection<ColorItem> _items = new();
+
         public VirindiColorTool()
         {
             InitializeComponent();
 
             this.Owner = App.Current.MainWindow;
 
+            dgVCT.ItemsSource = _items; // bind collection
+
             var colorInfo = ClothingTableList.GetVirindiColorToolInfo();
 
             for (var i = 0; i < colorInfo.Count; i++)
             {
-                ColorItem item = new ColorItem();
-                item.slot = i;
-                item.palID = "0x" + colorInfo[i].PalId.ToString("X4");
-                item.color = "0x" + colorInfo[i].Color.ToString("X6");
-
-                // Create as a Color to set the cell background property
-                var r = (byte)(colorInfo[i].Color >> 16);
-                var g = (byte)(colorInfo[i].Color >> 8);
-                var b = (byte)(colorInfo[i].Color);
-                item.swatchColor = Color.FromRgb(r, g, b);
-
-                dgVCT.Items.Add(item);
+                var ci = colorInfo[i];
+                var item = new ColorItem
+                {
+                    slot = i,
+                    palID = "0x" + ci.PalId.ToString("X4"),
+                    color = "0x" + ci.Color.ToString("X6"),
+                    swatchColor = Color.FromRgb((byte)(ci.Color >> 16), (byte)(ci.Color >> 8), (byte)(ci.Color))
+                };
+                _items.Add(item);
             }
 
             var icon = ClothingTableList.GetIcon();
@@ -66,12 +68,12 @@ namespace ACViewer.View
                 }
             }
 
-            // Find a matching item with this clothing base. May or may not be a valid loot item...
             try
             {
                 var match = LootArmorList.Loot.OrderBy(x => x.Key).First(x => x.Value.ClothingBase == ClothingTableList.CurrentClothingItem.Id.ToString("X8"));
                 lblName.Content = match.Value.Name;
-            }catch (Exception)
+            }
+            catch (Exception)
             {
                 lblName.Content = "";
             }

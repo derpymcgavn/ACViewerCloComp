@@ -1,47 +1,77 @@
-# ACViewer
+# ACViewer CloComp (Enhanced ACViewer)
 
-**ACViewer is a currently work-in-progress tool for viewing objects contained within the Asheron's Call game DAT files**
- * Latest client dat files supported.
- * Currently intended for developers and content editors.
- * Eventual dat file editing and WorldBuilder-like functionality are goals for this project
+Enhanced fork of ACViewer focused on clothing coloration, palette composition and advanced visualization of Asheron's Call data files.
 
-***
+## Branding
+"CloComp" (Clothing / Color Composer) – tools for inspecting, composing and previewing palette / color ranges for AC assets.
+
+## Key Enhancements Over Upstream ACViewer
+- Custom Palette Dialog (multi?palette mode only) with:
+  - Line based syntax: `0x<PaletteOrSetID> off:len[,off:len...]`
+  - Live preview + per?line range highlight visualization
+  - Shade factor (0–1) applied across composed palettes
+  - Automatic line insertion when selecting palettes / palette sets
+  - Support for PaletteSets (0xFxxxxxxx) with in?set browsing slider
+- Savable / loadable Custom Palette presets (JSON) with picker dialog
+- Robust range parser (comma + whitespace, validation) producing `Offset/Length` groups (logical groups of 8 colors for highlighting)
+- Virindi Color Tool integration / export visualization
+- Improved WPF UI layout (resizable dialog, dark friendly previews)
+- Safer parsing (graceful failures instead of silent crashes in most UI paths)
+
+## Usage Overview
+1. Open the Custom Palette dialog from the clothing / model context (menu or button depending on integration).
+2. Select a palette or palette set in the left list – a default full?range line is auto added.
+3. Edit the range tokens (e.g. `0:4,6:2`) to highlight specific 8?color groups.
+4. Adjust Shade slider for global dim/bright effect.
+5. Save preset (stored in `CustomPalettes.json` alongside the exe) or Load existing.
+
+## Range Syntax
+Token: `offset:length`
+- `offset` = group index (each group = 8 colors)
+- `length` = number of consecutive groups
+Multiple tokens separated by space or comma.
+Examples:
+- `0:8` first 64 colors
+- `0:4,8:4` two blocks of 32 colors each
+
+## Build Requirements
+- .NET 8 SDK
+- Windows (WPF + MonoGame WpfInterop)
+- NuGet restore (run `dotnet restore` at repo root)
+
+## Running
+1. Copy required AC data files (portal.dat, cell.dat, etc.) into a folder.
+2. Launch application.
+3. Set the AC data folder in configuration if not auto detected.
+
+## Projects
+- ACViewer (WPF + MonoGame host/UI)
+- ACE.DatLoader / ACE.Entity / ACE.Common / ACE.Database (data access for DAT content)
+
+## Preset Storage
+`CustomPalettes.json` (created on first save) – simple array of objects:
+```json
+[{"Name":"Example","Multi":true,"Shade":0.25,"Entries":[{"PaletteSetId":4026531840,"Ranges":[{"Offset":0,"Length":8}]}]}]
+```
+Fields may evolve; backward compatibility kept best?effort.
+
+## Contributing
+PRs welcome for:
+- Additional visualization (alpha channel, diff tools)
+- Export / import formats (Virindi, JSON schema evolution)
+- Validation & error messaging improvements
+
+## License
+(Insert your chosen license here – MIT / GPL / etc.)
+
 ## Disclaimer
-**This project is for educational and non-commercial purposes only, use of the game client is for interoperability with the emulated server.**
-- Asheron's Call was a registered trademark of Turbine, Inc. and WB Games Inc which has since expired.
-- ACEmulator is not associated or affiliated in any way with Turbine, Inc. or WB Games Inc.
-***
+Not affiliated with Turbine or WB. For educational and archival purposes.
 
-## Getting Started
+## Roadmap Ideas
+- Batch compare palettes across sets
+- Color search (nearest palette entry)
+- CLI export of composed palettes
+- Undo/redo in Custom Palette dialog
 
-For quick start, precompiled binaries:
-* Click [here](https://github.com/ACEmulator/ACViewer/releases/latest) to download the [latest release](https://github.com/ACEmulator/ACViewer/releases/latest) of ACViewer.
-* Download either the Release or Debug version as desired.
-* Extract the zip file.
-* Double click on ACViewer.exe to start.
-
-### **Visit the [Help](https://acemulator.github.io/ACViewer/) site for further information on usage**
-
-For Developers To Build:
-* Install Visual Studio 2017
-  - [Visual Studio minimum required version - VS Community 2017 15.7.0](https://www.visualstudio.com/thank-you-downloading-visual-studio/?sku=Community&rel=15)
-  - [.NET Core 2.1 x64 SDK; .NET Framework 4.7.2 Developer Pack Required](https://www.microsoft.com/net/download/visual-studio-sdks)
-  - If using Visual Studio Community Edition, make sure the following two workloads are installed: .NET Core cross-platform development and .NET Desktop Development
-* Clone repo and submodules
-* Load ACViewer.sln and build.
-
-## Contributions
-
-* Contributions in the form of issues and pull requests are welcomed and encouraged.
-* The preferred way to contribute is to fork the repo and submit a pull request on GitHub.
-
-Please note that this project is released with a [Contributor Code of Conduct](https://github.com/ACEmulator/ACE/blob/master/CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
-
-## Bug Reports
-
-* Please use the [issue tracker](https://github.com/ACEmulator/ACViewer/issues) provided by GitHub to send us bug reports.
-* You may also discuss issues and bug reports on our discord listed below.
-
-## Contact
-
-- [Discord Channel](https://discord.gg/C2WzhP9)
+---
+Original ACViewer credit to its authors; this fork emphasizes advanced clothing & color composition workflows.
