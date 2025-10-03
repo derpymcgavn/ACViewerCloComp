@@ -4,36 +4,46 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ACViewer.View"
-        xmlns:scenes="clr-namespace:ACViewer" d:DataContext="{d:DesignInstance Type=local:MainWindow}"
+        xmlns:scenes="clr-namespace:ACViewer"
+        xmlns:ad="clr-namespace:AvalonDock;assembly=AvalonDock"
+        xmlns:adLayout="clr-namespace:AvalonDock.Layout;assembly=AvalonDock"
+        d:DataContext="{d:DesignInstance Type=local:MainWindow}"
         mc:Ignorable="d"
-        Title="ACViewer" Width="1342" Height="798" Style="{DynamicResource CustomWindowStyle}" SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
-    
-    <Grid x:Name="LayoutRoot">
+        Title="ACViewer" Width="1400" Height="860" Style="{DynamicResource CustomWindowStyle}" SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
 
-        <Grid.RowDefinitions>
-            <RowDefinition Height="20" />
-            <RowDefinition Height=".1*" />
-            <RowDefinition Name="HSplit" Height="67" />
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Name="VSplit" Width="360" />
-            <ColumnDefinition Width="20" />
-            <ColumnDefinition Width=".1*" />
-        </Grid.ColumnDefinitions>
+    <DockPanel>
+        <!-- Main menu at top -->
+        <local:MainMenu x:Name="menuMain" DockPanel.Dock="Top" />
 
-        <local:MainMenu x:Name="menuMain" Grid.Row="0" Grid.ColumnSpan="3"/>
+        <ad:DockingManager x:Name="DockManager">
+            <ad:DockingManager.Layout>
+                <adLayout:LayoutRoot>
+                    <adLayout:LayoutPanel Orientation="Horizontal">
+                        <!-- Explorer Pane -->
+                        <adLayout:LayoutAnchorablePane DockWidth="320">
+                            <adLayout:LayoutAnchorable Title="Explorer" ContentId="Explorer" CanClose="False">
+                                <local:FileExplorer />
+                            </adLayout:LayoutAnchorable>
+                        </adLayout:LayoutAnchorablePane>
 
-        <local:FileExplorer Grid.Row="1" Margin="0,0,0,7.5"/>
+                        <!-- Center Documents -->
+                        <adLayout:LayoutDocumentPane>
+                            <adLayout:LayoutDocument Title="World" ContentId="Render" CanClose="False">
+                                <scenes:GameView x:Name="Scene" />
+                            </adLayout:LayoutDocument>
+                        </adLayout:LayoutDocumentPane>
 
-        <GridSplitter Grid.Column="1" Grid.Row="1" HorizontalAlignment="Center" Width="4.5"/>
-
-        <scenes:GameView x:Name="Scene" Grid.Row="1" Grid.Column="2" Margin="0,22,10,7.5" />
-
-        <GridSplitter Grid.Row="2" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" VerticalAlignment="Top" Height="3.75" ResizeDirection="Rows" />
-
-        <TextBox Name="Status" TextWrapping="Wrap" Margin="7.5,7.5,7.5,7.5" Padding="3" Grid.Row="2" Grid.ColumnSpan="3" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-
-    </Grid>
+                        <!-- Output Pane -->
+                        <adLayout:LayoutAnchorablePane DockWidth="360">
+                            <adLayout:LayoutAnchorable Title="Output" ContentId="Output" CanClose="False" CanHide="True">
+                                <TextBox x:Name="Status" TextWrapping="Wrap" Padding="4" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" IsReadOnly="True" />
+                            </adLayout:LayoutAnchorable>
+                        </adLayout:LayoutAnchorablePane>
+                    </adLayout:LayoutPanel>
+                </adLayout:LayoutRoot>
+            </ad:DockingManager.Layout>
+        </ad:DockingManager>
+    </DockPanel>
 
     <Window.InputBindings>
         <KeyBinding Command="{Binding FindCommand}" Gesture="Ctrl+F" />
