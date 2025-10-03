@@ -6,6 +6,7 @@ using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
 using System;
 using System.Reflection;
+using System.Threading;
 
 namespace ACViewer.CustomTextures
 {
@@ -13,6 +14,18 @@ namespace ACViewer.CustomTextures
     {
         private const string FileName = "CustomTextures.json";
         private static List<CustomTextureDefinition> _cache;
+
+        // Added watcher for real-time updates of last imported JSON file
+        private static FileSystemWatcher _activeWatcher;
+        private static string _watchedClothingJsonPath;
+        private static DateTime _lastWatcherRead = DateTime.MinValue;
+        private static readonly object _watcherLock = new();
+
+        /// <summary>
+        /// Raised when a watched clothing JSON file is modified on disk and successfully re-imported.
+        /// Provides the updated ClothingTable instance.
+        /// </summary>
+        public static event Action<ClothingTable> ClothingJsonUpdated;
 
         public static IEnumerable<CustomTextureDefinition> LoadAll()
         {
@@ -49,7 +62,7 @@ namespace ACViewer.CustomTextures
                     }
                     baseOut.CloObjectEffects.Add(objOut);
                 }
-                export.ClothingBaseEffects[$"0x{kvp.Key:X6}"] = baseOut; // key formatting similar to sample (variable widths retained)
+                export.ClothingBaseEffects[$"0x{kvp.Key:X6}"] = baseOut; // key formatting similar to sample
             }
             foreach (var kvp in table.ClothingSubPalEffects)
             {
@@ -150,10 +163,9 @@ namespace ACViewer.CustomTextures
                         {
                             var offRaw = ParseUInt(r.Offset);
                             var lenRaw = ParseUInt(r.NumColors);
-                            // Enforce multiples of 8 (palette groups). Round down to nearest valid boundary.
                             if (offRaw % 8 != 0) offRaw -= offRaw % 8;
                             if (lenRaw % 8 != 0) lenRaw -= lenRaw % 8;
-                            if (lenRaw == 0) continue; // skip invalid after adjustment
+                            if (lenRaw == 0) continue;
                             spDef.Ranges.Add(new CloSubPaletteRange
                             {
                                 Offset = offRaw,
@@ -175,9 +187,88 @@ namespace ACViewer.CustomTextures
             return table;
         }
 
+        /// <summary>
+        /// Begin watching a specific clothing JSON file for modifications. Each change triggers a safe re-import and UI refresh callback.
+        /// </summary>
+        public static void WatchClothingJson(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+            try
+            {
+                lock (_watcherLock)
+                {
+                    var full = Path.GetFullPath(path);
+                    if (string.Equals(full, _watchedClothingJsonPath, StringComparison.OrdinalIgnoreCase))
+                        return; // already watching
+
+                    DisposeWatcher_NoLock();
+
+                    _watchedClothingJsonPath = full;
+                    _activeWatcher = new FileSystemWatcher(Path.GetDirectoryName(full)!, Path.GetFileName(full))
+                    {
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName
+                    };
+                    _activeWatcher.Changed += WatcherOnChanged;
+                    _activeWatcher.Renamed += WatcherOnChanged;
+                    _activeWatcher.EnableRaisingEvents = true;
+                }
+            }
+            catch { /* swallow watcher issues silently */ }
+        }
+
+        private static void WatcherOnChanged(object sender, FileSystemEventArgs e)
+        {
+            // Debounce rapid successive events
+            lock (_watcherLock)
+            {
+                if ((DateTime.UtcNow - _lastWatcherRead).TotalMilliseconds < 150)
+                    return;
+                _lastWatcherRead = DateTime.UtcNow;
+            }
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                // Allow file write to complete
+                Thread.Sleep(120);
+                try
+                {
+                    ClothingTable updated = ImportClothingTable(_watchedClothingJsonPath);
+                    ClothingJsonUpdated?.Invoke(updated);
+                }
+                catch
+                {
+                    // ignore parse errors during live edit; UI keeps last good state
+                }
+            });
+        }
+
+        public static void StopWatchingClothingJson()
+        {
+            lock (_watcherLock)
+            {
+                DisposeWatcher_NoLock();
+                _watchedClothingJsonPath = null;
+            }
+        }
+
+        private static void DisposeWatcher_NoLock()
+        {
+            if (_activeWatcher != null)
+            {
+                try
+                {
+                    _activeWatcher.EnableRaisingEvents = false;
+                    _activeWatcher.Changed -= WatcherOnChanged;
+                    _activeWatcher.Renamed -= WatcherOnChanged;
+                    _activeWatcher.Dispose();
+                }
+                catch { }
+                _activeWatcher = null;
+            }
+        }
+
         private static uint ParseUInt(string s)
         {
-            // Adapted: if value starts with 0x treat as hexadecimal, otherwise treat as decimal (previously assumed hex always).
             if (string.IsNullOrWhiteSpace(s)) return 0;
             s = s.Trim();
             if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))

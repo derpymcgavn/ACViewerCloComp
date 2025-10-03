@@ -21,6 +21,8 @@
                         <Image Source="../Icons/Settings_16x.png" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <Separator />
+                <MenuItem Header="Save Layout as Default" Click="SaveLayoutAsDefault_Click" />
             </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Find DID" Click="FindDID_Click" InputGestureText="Ctrl+F">
@@ -48,6 +50,10 @@
                         <Image Source="../Icons/plume.png" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="Palette _Editor" Click="Menu_OpenPaletteEditor" />
+                <Separator />
+                <MenuItem Header="Import Clothing JSON..." Click="ImportClothingJson_Click" />
+                <MenuItem Header="Export Clothing JSON..." Click="ExportClothingJson_Click" />
             </MenuItem>
             <MenuItem Header="_Server">
                 <MenuItem Header="Load _Instances" Click="LoadInstances_Click" x:Name="optionLoadInstances"/>

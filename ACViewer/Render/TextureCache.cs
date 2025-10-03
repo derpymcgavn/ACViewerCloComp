@@ -332,8 +332,28 @@ namespace ACViewer.Render
                         var offset = (int)range.Offset;
                         var numColors = (int)range.NumColors;
 
+#if DEBUG
+                        if ((offset % 8) != 0 || (numColors % 8) != 0)
+                            Console.WriteLine($"[PaletteApply] Non 8-aligned range Offset={offset} NumColors={numColors}");
+#endif
                         for (var j = 0; j < numColors; j++)
-                            paletteColors[j + offset] = newPalette.Colors[j + offset];
+                        {
+                            var dst = offset + j;          // destination absolute index
+                            var src = offset + j;          // source absolute index (ranges are absolute palette indices)
+
+                            if (dst < 0 || dst >= paletteColors.Count)
+                            {
+                                Console.WriteLine($"[PaletteApply] Destination OOB dst={dst} paletteSize={paletteColors.Count} off={offset} n={numColors} palId={newPalette.Id:X8}");
+                                break; // further dst will also be out of range
+                            }
+                            if (src < 0 || src >= newPalette.Colors.Count)
+                            {
+                                Console.WriteLine($"[PaletteApply] Source OOB src={src} newPalSize={newPalette.Colors.Count} off={offset} n={numColors} palId={newPalette.Id:X8}");
+                                break; // cannot proceed copying from this range
+                            }
+
+                            paletteColors[dst] = newPalette.Colors[src];
+                        }
                     }
                 }
             }
@@ -346,6 +366,11 @@ namespace ACViewer.Render
                 {
                     int idx = (i * texture.Width) + j;
                     var color = colors[idx];
+                    if (color < 0 || color >= paletteColors.Count)
+                    {
+                        // Guard against corrupt index values
+                        continue;
+                    }
                     var paletteColor = paletteColors[color];
 
                     byte a = Convert.ToByte((paletteColor & 0xFF000000) >> 24);

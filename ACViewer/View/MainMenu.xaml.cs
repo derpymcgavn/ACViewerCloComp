@@ -4,6 +4,8 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Linq; // ensure Linq for later if needed
+using AvalonDock.Layout;
 
 using Microsoft.Win32;
 
@@ -15,6 +17,8 @@ using ACViewer.Config;
 using ACViewer.Data;
 using ACViewer.Enum;
 using ACViewer.Render;
+using ACViewer.CustomTextures; // added
+using ACViewer.FileTypes; // added
 
 namespace ACViewer.View
 {
@@ -49,6 +53,26 @@ namespace ACViewer.View
         {
             InitializeComponent();
             Instance = this;
+
+            // subscribe to live clothing JSON update events for real-time model refresh
+            CustomTextureStore.ClothingJsonUpdated += updated =>
+            {
+                // ensure UI thread
+                Dispatcher.Invoke(() =>
+                {
+                    if (updated == null) return;
+                    if (ClothingTableList.Instance == null) return;
+
+                    // Preserve current selection context if possible
+                    var currentSetupIndex = ClothingTableList.Instance.SetupIds?.SelectedIndex ?? -1;
+                    uint? currentPaletteTemplate = ClothingTableList.PaletteTemplate;
+                    float? currentShade = ClothingTableList.Shade;
+
+                    ClothingTableList.Instance.OnClickClothingBase(updated, updated.Id, currentPaletteTemplate, currentShade);
+
+                    MainWindow?.AddStatusText($"Reloaded clothing JSON: 0x{updated.Id:X8}");
+                });
+            };
         }
 
         private void OpenFile_Click(object sender, RoutedEventArgs e)
@@ -400,6 +424,101 @@ namespace ACViewer.View
         {
             var armorWindow = new ArmorList();
             armorWindow.ShowDialog();
+        }
+
+        private void ImportClothingJson_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog { Filter = "Clothing JSON (*.json)|*.json", Title = "Import Clothing JSON" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var imported = CustomTextureStore.ImportClothingTable(dlg.FileName);
+                if (imported == null)
+                {
+                    MainWindow.Instance.AddStatusText("Import failed: empty file");
+                    return;
+                }
+                if (ClothingTableList.Instance != null)
+                {
+                    ClothingTableList.Instance.OnClickClothingBase(imported, imported.Id, null, null);
+                    ClothingTableList.Instance.ForceOpenPaletteEditorAfterImport();
+                }
+                MainWindow.Instance.AddStatusText($"Imported clothing JSON: {System.IO.Path.GetFileName(dlg.FileName)}");
+                // Start watching for live edits
+                CustomTextureStore.WatchClothingJson(dlg.FileName);
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExportClothingJson_Click(object sender, RoutedEventArgs e)
+        {
+            var clothing = ClothingTableList.CurrentClothingItem; // this is ACE.DatLoader.FileTypes.ClothingTable
+            if (clothing == null)
+            {
+                MainWindow.Instance.AddStatusText("No clothing table selected for export");
+                return;
+            }
+            var save = new SaveFileDialog { Filter = "Clothing JSON (*.json)|*.json", FileName = $"{clothing.Id:X8}.json", Title = "Export Clothing JSON" };
+            if (save.ShowDialog() == true)
+            {
+                try
+                {
+                    CustomTextureStore.ExportClothingTable(clothing, save.FileName);
+                    MainWindow.Instance.AddStatusText($"Exported clothing JSON: {Path.GetFileName(save.FileName)}");
+                    // Start watching the exported file too for iterative edits
+                    CustomTextureStore.WatchClothingJson(save.FileName);
+                }
+                catch (System.Exception ex)
+                {
+                    MessageBox.Show($"Export failed: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void Menu_OpenPaletteEditor(object sender, RoutedEventArgs e)
+        {
+            ClothingTableList.Instance?.OpenPaletteAndTextureEditors();
+        }
+
+        private void BuildDockVisibilityMenu()
+        {
+            var viewMenu = (this.Content as Grid)?.Children.OfType<Menu>().FirstOrDefault()? .Items.OfType<MenuItem>().FirstOrDefault(mi => (string)mi.Header == "_View");
+            if (viewMenu == null) return;
+            // Remove old dynamic section
+            var existing = viewMenu.Items.OfType<Separator>().FirstOrDefault(s => (s.Tag as string) == "DockWindowsSeparator");
+            if (existing != null)
+            {
+                int idx = viewMenu.Items.IndexOf(existing);
+                while (viewMenu.Items.Count > idx + 1 && viewMenu.Items[idx + 1] is MenuItem m && (m.Tag as string) == "DockWindowItem")
+                    viewMenu.Items.RemoveAt(idx + 1);
+                viewMenu.Items.Remove(existing);
+            }
+            var mw = MainWindow.Instance;
+            if (mw?.DockManager?.Layout == null) return;
+            var docks = mw.DockManager.Layout.Descendents().OfType<LayoutAnchorable>().ToList();
+            if (docks.Count == 0) return;
+            var sep = new Separator { Tag = "DockWindowsSeparator" };
+            viewMenu.Items.Add(sep);
+            foreach (var a in docks)
+            {
+                var mi = new MenuItem { Header = a.Title, IsCheckable = true, IsChecked = a.IsVisible, Tag = "DockWindowItem" };
+                mi.Click += (_, __) => { if (mi.IsChecked) a.Show(); else a.Hide(); };
+                viewMenu.Items.Add(mi);
+            }
+        }
+
+        // call after layout changes or on menu opened
+        private void ViewMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            BuildDockVisibilityMenu();
+        }
+
+        private void SaveLayoutAsDefault_Click(object sender, RoutedEventArgs e)
+        {
+            MainWindow.Instance.SaveLayoutAsDefault();
         }
     }
 }

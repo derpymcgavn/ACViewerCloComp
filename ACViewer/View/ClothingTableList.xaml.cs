@@ -8,8 +8,11 @@ using ACE.DatLoader;
 using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
 using ACE.Entity.Enum;
-using ACViewer.CustomPalettes; // added
+using ACViewer.CustomPalettes;
 using ACViewer.CustomTextures;
+using AvalonDock.Layout;
+using ACViewer.Model; // for CloSubPalette definitions
+using ACViewer.ViewModels;
 
 namespace ACViewer.View
 {
@@ -29,23 +32,48 @@ namespace ACViewer.View
         private static float _customShade;
         private static uint? _lastActualPaletteTemplate;
 
+        // cache last pushed non-custom resolved palettes (for editors / inspection)
+        private static List<CloSubPalette> _resolvedStandardPalettes;
+
+        // remember last JSON file path loaded (for toggling watch etc.)
+        private static string _lastImportedJsonPath;
+
+        // Data model used by VirindiColorTool
+        public class VirindiColorInfo
+        {
+            public uint PalId { get; set; }
+            public uint Color { get; set; }
+        }
+
         public ClothingTableList()
         {
             InitializeComponent();
             Instance = this;
-            DataContext = this;
+            DataContext = ViewModels.ClothingEditingSession.Instance;
         }
 
         public void OnClickClothingBase(ClothingTable clothing, uint fileID, uint? paletteTemplate = null, float? shade = null)
         {
             CurrentClothingItem = clothing;
+            // Populate / refresh editing session view model (Phase 2 mapping)
+            try
+            {
+                var session = ViewModels.ClothingEditingSession.Instance;
+                if (clothing != null)
+                {
+                    ViewModels.ClothingMapping.AddOrUpdate(session, clothing);
+                }
+                // enable palette dialog if open
+                CustomPaletteDialog.ActiveInstance?.SetHasClothing(clothing != null);
+            }
+            catch { }
             SetupIds.Items.Clear();
             PaletteTemplates.Items.Clear();
             ResetShadesSlider();
             _customActive = false;
             _lastActualPaletteTemplate = null;
 
-            if (CurrentClothingItem.ClothingBaseEffects.Count == 0) return;
+            if (CurrentClothingItem?.ClothingBaseEffects == null || CurrentClothingItem.ClothingBaseEffects.Count == 0) return;
 
             foreach (var cbe in CurrentClothingItem.ClothingBaseEffects.Keys.OrderBy(i => i))
                 SetupIds.Items.Add(new ListBoxItem { Content = cbe.ToString("X8"), DataContext = cbe });
@@ -92,34 +120,37 @@ namespace ACViewer.View
             ResetShadesSlider();
             if (CurrentClothingItem == null) return;
             if (PaletteTemplates.SelectedItem is not ListBoxItem selectedItem) return;
+
             uint palTemp = (uint)selectedItem.DataContext;
 
-            if (palTemp == CustomPaletteKey) { OpenCustomDialog(); return; }
+            // Always update (avoid stale static)
+            PaletteTemplate = palTemp;
+
+            if (palTemp == CustomPaletteKey)
+            {
+                OpenCustomDialog();
+                return;
+            }
 
             if (palTemp > 0)
             {
                 if (!CurrentClothingItem.ClothingSubPalEffects.ContainsKey(palTemp)) return;
-                PaletteTemplate = palTemp; _lastActualPaletteTemplate = palTemp;
+                _lastActualPaletteTemplate = palTemp;
+
                 int maxPals = 0;
                 foreach (var sp in CurrentClothingItem.ClothingSubPalEffects[palTemp].CloSubPalettes)
                 {
                     var palSetID = sp.PaletteSet;
-                    int count = 1; // default for a direct palette (0x04) or failure
+                    int count = 1;
                     if ((palSetID >> 24) == 0x0F)
                     {
                         try
                         {
                             var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(palSetID);
-                            count = palSet.PaletteList?.Count > 0 ? palSet.PaletteList.Count : 1;
+                            count = (palSet.PaletteList?.Count ?? 0) > 0 ? palSet.PaletteList.Count : 1;
                         }
-                        catch (Exception ex)
-                        {
-                            // Log once per selection; treat as single variant
-                            MainWindow.Status.WriteLine($"Warning: Failed to load PaletteSet {palSetID:X8} as set ({ex.Message}). Treating as single palette.");
-                            count = 1;
-                        }
+                        catch { count = 1; }
                     }
-                    // for raw palette (0x04xxxxxx) count remains 1
                     if (count > maxPals) maxPals = count;
                 }
                 if (maxPals > 1)
@@ -127,13 +158,52 @@ namespace ACViewer.View
                     Shades.Maximum = maxPals - 1;
                     Shades.Visibility = Visibility.Visible;
                     Shades.IsEnabled = true;
-                    MainWindow.Status.WriteLine($"Found {maxPals} shade options for palette template {palTemp}.");
                 }
             }
-            else _lastActualPaletteTemplate = null;
+            else
+            {
+                _lastActualPaletteTemplate = null;
+            }
 
             _customActive = false;
             LoadModelWithClothingBase();
+            RefreshDockEditorsIfPresent();
+        }
+
+        private List<CloSubPalette> BuildResolvedPalettes(uint paletteTemplate, float shade)
+        {
+            var list = new List<CloSubPalette>();
+            if (paletteTemplate == 0 || CurrentClothingItem == null) return list;
+            if (!CurrentClothingItem.ClothingSubPalEffects.TryGetValue(paletteTemplate, out var effect)) return list;
+
+            foreach (var sp in effect.CloSubPalettes)
+            {
+                uint resolvedPaletteId = sp.PaletteSet;
+                // If palette set (0x0Fxxxxxx) pick shade-specific palette
+                if ((sp.PaletteSet >> 24) == 0x0F)
+                {
+                    try
+                    {
+                        var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(sp.PaletteSet);
+                        resolvedPaletteId = palSet.GetPaletteID(shade);
+                    }
+                    catch { /* ignore; retain original id if failure */ }
+                }
+
+                // Clone CloSubPalette with resolved palette ID while keeping ranges
+                var clone = new CloSubPalette
+                {
+                    PaletteSet = resolvedPaletteId
+                };
+                foreach (var r in sp.Ranges)
+                    clone.Ranges.Add(new CloSubPaletteRange
+                    {
+                        Offset = r.Offset,
+                        NumColors = r.NumColors
+                    });
+                list.Add(clone);
+            }
+            return list;
         }
 
         private CustomPaletteDefinition BuildSeedDefinition()
@@ -146,14 +216,115 @@ namespace ACViewer.View
                 var entry = new CustomPaletteEntry { PaletteSetId = sp.PaletteSet };
                 foreach (var r in sp.Ranges)
                 {
-                    // Source ranges are stored in raw color units (Offset / NumColors). Convert to logical groups (8 colors per group)
-                    var groupOffset = r.Offset / 8; // int division ok; data should align to 8
+                    var groupOffset = r.Offset / 8;
                     var groupLen = r.NumColors / 8;
                     entry.Ranges.Add(new RangeDef { Offset = groupOffset, Length = groupLen });
                 }
                 def.Entries.Add(entry);
             }
-            if (def.Entries.Count == 1) def.Multi = false; return def;
+            if (def.Entries.Count == 1) def.Multi = false;
+            return def;
+        }
+
+        public void LoadModelWithClothingBase()
+        {
+            if (CurrentClothingItem == null || SetupIds.SelectedIndex == -1 || PaletteTemplates.SelectedIndex == -1)
+                return;
+
+            var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
+            float shade = 0;
+
+            if (Shades.Visibility == Visibility.Visible)
+            {
+                shade = (float)(Shades.Value / Shades.Maximum);
+                if (float.IsNaN(shade)) shade = 0;
+            }
+
+            Shade = shade;
+            lblShade.Visibility = Shades.Visibility;
+            lblShade.Content = "Shade: " + shade;
+
+            // If custom active, use custom path
+            if (_customActive && _customCloSubPalettes != null)
+            {
+                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
+                return;
+            }
+
+            // Standard path unified via resolved palettes (unless "None")
+            if (PaletteTemplate > 0)
+            {
+                _resolvedStandardPalettes = BuildResolvedPalettes(PaletteTemplate, shade);
+                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _resolvedStandardPalettes, shade);
+            }
+            else
+            {
+                // No palette template selected ("None") -> fall back to vanilla
+                ModelViewer.LoadModel(setupId, CurrentClothingItem, (PaletteTemplate)0, shade);
+                _resolvedStandardPalettes = null;
+            }
+        }
+
+        private void Shades_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Shades.Visibility == Visibility.Hidden) return;
+            if (_customActive) return;
+            LoadModelWithClothingBase();
+            RefreshDockEditorsIfPresent();
+        }
+
+        private void RefreshDockEditorsIfPresent()
+        {
+            var mw = View.MainWindow.Instance;
+            if (mw?.DockManager == null) return;
+
+            var layout = mw.DockManager.Layout;
+            var paletteDock = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == "CustomPaletteDock");
+            var textureDock = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == "TextureOverridesDock");
+
+            if (paletteDock == null && textureDock == null) return;
+
+            // Build fresh definition (non-destructive). For standard selection we seed from original template.
+            CustomPaletteDefinition def = _customActive
+                ? BuildSeedDefinitionFromCustom()
+                : BuildSeedDefinition();
+
+            if (def == null) return;
+
+            if (paletteDock?.Content is ICustomPaletteHost host)
+            {
+                host.LoadDefinition(def, isLive: false);
+            }
+
+            if (textureDock?.Content is ITextureOverrideHost texHost)
+            {
+                texHost.UpdateFromPalette(def);
+            }
+        }
+
+        private CustomPaletteDefinition BuildSeedDefinitionFromCustom()
+        {
+            if (!_customActive || _customCloSubPalettes == null) return null;
+            var def = new CustomPaletteDefinition
+            {
+                Multi = _customCloSubPalettes.Count > 1,
+                Shade = _customShade
+            };
+            foreach (var sp in _customCloSubPalettes)
+            {
+                var entry = new CustomPaletteEntry { PaletteSetId = sp.PaletteSet };
+                foreach (var r in sp.Ranges)
+                {
+                    var groupOffset = r.Offset / 8;
+                    var groupLen = r.NumColors / 8;
+                    entry.Ranges.Add(new RangeDef { Offset = groupOffset, Length = groupLen });
+                }
+                def.Entries.Add(entry);
+            }
+            if (def.Entries.Count == 1) def.Multi = false;
+            return def;
         }
 
         private List<uint> BuildAvailablePaletteIdList()
@@ -215,146 +386,241 @@ namespace ACViewer.View
                 .ToList();
         }
 
-        private void OpenCustomDialog()
+        public void OpenCustomDialog()
         {
+            var mw = View.MainWindow.Instance;
+            if (mw?.DockManager == null)
+            {
+                MainWindow?.AddStatusText("DockManager not ready - cannot open Custom Palette panel.");
+                return;
+            }
+
             var dlg = new CustomPaletteDialog
             {
-                Owner = MainWindow,
                 StartingDefinition = BuildSeedDefinition(),
                 AvailablePaletteIDs = BuildAvailablePaletteIdList(),
                 OnLiveUpdate = LiveUpdateCustom
             };
-            var result = dlg.ShowDialog();
-            if (result == true && dlg.ResultDefinition != null)
+
+            try
             {
-                try { ApplyCustomDefinition(dlg.ResultDefinition); }
-                catch (Exception ex)
-                { _customActive = false; MainWindow.Status.WriteLine($"Failed applying custom palette: {ex.Message}"); PaletteTemplates.SelectedIndex = 0; }
+                var layout = mw.DockManager.Layout;
+                var existing = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorable>()
+                    .FirstOrDefault(a => a.ContentId == "CustomPaletteDock");
+
+                // Build definition now (maybe null)
+                CustomPaletteDefinition currentDef = _customActive ? BuildSeedDefinitionFromCustom() : BuildSeedDefinition();
+
+                if (existing != null)
+                {
+                    existing.IsActive = true;
+                    existing.IsVisible = true;
+                    if (currentDef != null && existing.Content is ICustomPaletteHost host)
+                        host.LoadDefinition(currentDef, isLive: false);
+
+                    // Refresh texture dock if exists
+                    var texDock2 = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorable>()
+                        .FirstOrDefault(a => a.ContentId == "TextureOverridesDock");
+                    if (currentDef != null && texDock2?.Content is ITextureOverrideHost texHost2)
+                        texHost2.UpdateFromPalette(currentDef);
+                    return;
+                }
+
+                var targetPane = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorablePane>()
+                    .FirstOrDefault(p => p.Children.Any(c => c.ContentId == "JsonEditor"))
+                    ?? layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorablePane>().FirstOrDefault();
+
+                if (targetPane == null)
+                {
+                    MainWindow?.AddStatusText("No suitable pane found for Custom Palette panel.");
+                    return; // No popup fallback
+                }
+
+                dlg.InitializeForDock();
+                var parts = dlg.GetDockParts();
+                if (parts.palette is UIElement palContent)
+                {
+                    var anchor = new AvalonDock.Layout.LayoutAnchorable
+                    {
+                        Title = "Custom Palette",
+                        ContentId = "CustomPaletteDock",
+                        Content = palContent,
+                        CanClose = true,
+                        CanHide = true
+                    };
+                    targetPane.Children.Add(anchor);
+                    anchor.IsActive = true;
+                    if (currentDef != null && palContent is ICustomPaletteHost host)
+                        host.LoadDefinition(currentDef, isLive: false);
+                    else if (currentDef == null && CurrentClothingItem != null)
+                    {
+                        // Defer definition if not yet available
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            var defLater = _customActive ? BuildSeedDefinitionFromCustom() : BuildSeedDefinition();
+                            if (defLater != null && anchor.Content is ICustomPaletteHost hostLater)
+                                hostLater.LoadDefinition(defLater, isLive: false);
+                        }));
+                    }
+                }
+                if (parts.textures is UIElement texContent)
+                {
+                    var texAnchor = new AvalonDock.Layout.LayoutAnchorable
+                    {
+                        Title = "Texture Overrides",
+                        ContentId = "TextureOverridesDock",
+                        Content = texContent,
+                        CanClose = true,
+                        CanHide = true
+                    };
+                    targetPane.Children.Add(texAnchor);
+                    if (currentDef != null && texContent is ITextureOverrideHost texHost)
+                        texHost.UpdateFromPalette(currentDef);
+                }
             }
-            else PaletteTemplates.SelectedIndex = 0;
+            catch (Exception ex)
+            {
+                MainWindow?.AddStatusText($"Failed to open Custom Palette panel: {ex.Message}");
+            }
         }
 
-        private void ApplyCustomDefinition(CustomPaletteDefinition def)
+        public void OpenPaletteAndTextureEditors() => OpenCustomDialog();
+
+        // ---------------- Added helper methods ----------------
+
+        private void ResetShadesSlider()
         {
-            _customCloSubPalettes = CustomPaletteFactory.Build(def);
-            _customShade = def.Shade; _customActive = true; Shade = _customShade;
-            lblShade.Visibility = Visibility.Visible; lblShade.Content = $"Shade: {_customShade:0.###}";
-            Shades.Visibility = Visibility.Hidden; Shades.IsEnabled = false;
-            LoadModelWithClothingBase();
-            MainWindow.Status.WriteLine("Applied custom palette definition");
+            Shades.Visibility = Visibility.Hidden;
+            Shades.IsEnabled = false;
+            Shades.Value = 0;
+            lblShade.Visibility = Visibility.Hidden;
         }
 
         private void LiveUpdateCustom(CustomPaletteDefinition def)
         {
+            if (def == null || CurrentClothingItem == null || SetupIds.SelectedIndex < 0) return;
+            var list = new List<CloSubPalette>();
+            foreach (var entry in def.Entries)
+            {
+                var sp = new CloSubPalette { PaletteSet = entry.PaletteSetId };
+                foreach (var r in entry.Ranges)
+                {
+                    sp.Ranges.Add(new CloSubPaletteRange { Offset = r.Offset * 8, NumColors = r.Length * 8 });
+                }
+                list.Add(sp);
+            }
+            _customCloSubPalettes = list;
+            _customShade = def.Shade;
+            _customActive = true;
+            var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
+            ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
+        }
+
+        public void ApplyPalettePreviewDefinition(CustomPaletteDefinition def)
+        {
+            // Apply without toggling permanent custom state (preview only)
+            if (def == null || CurrentClothingItem == null || SetupIds.SelectedIndex < 0) return;
+            var list = new List<CloSubPalette>();
+            foreach (var entry in def.Entries)
+            {
+                var sp = new CloSubPalette { PaletteSet = entry.PaletteSetId };
+                foreach (var r in entry.Ranges)
+                    sp.Ranges.Add(new CloSubPaletteRange { Offset = r.Offset * 8, NumColors = r.Length * 8 });
+                list.Add(sp);
+            }
+            var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
+            ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, list, def.Shade);
+        }
+
+        public void ForceOpenPaletteEditorAfterImport()
+        {
+            // Open editor window to allow immediate editing of imported item
+            OpenPaletteAndTextureEditors();
+        }
+
+        public static List<VirindiColorInfo> GetVirindiColorToolInfo()
+        {
+            // Minimal placeholder: return empty list if no clothing loaded.
+            // Extend later with actual palette slot extraction logic as needed.
+            var list = new List<VirindiColorInfo>();
+            if (CurrentClothingItem == null) return list;
+            // Attempt to build simple color info from first palette definition if available
             try
             {
-                _customCloSubPalettes = CustomPaletteFactory.Build(def);
-                _customShade = def.Shade; _customActive = true; Shade = _customShade;
-                if (SetupIds.SelectedItem is ListBoxItem item)
-                    ModelViewer.LoadModelCustom((uint)item.DataContext, CurrentClothingItem, _customCloSubPalettes, _customShade);
-            }
-            catch { }
-        }
-
-        private void ResetShadesSlider()
-        {
-            Shades.Visibility = Visibility.Hidden; Shades.IsEnabled = false; Shades.Value = 0; Shades.Maximum = 1; Shade = 0;
-        }
-
-        public void LoadModelWithClothingBase()
-        {
-            if (CurrentClothingItem == null || SetupIds.SelectedIndex == -1 || PaletteTemplates.SelectedIndex == -1) return;
-            var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
-            if (_customActive)
-            { ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade); return; }
-            float shade = 0;
-            if (Shades.Visibility == Visibility.Visible)
-            { shade = (float)(Shades.Value / Shades.Maximum); if (float.IsNaN(shade)) shade = 0; }
-            Shade = shade; lblShade.Visibility = Shades.Visibility; lblShade.Content = "Shade: " + shade.ToString();
-            var paletteTemplate = (PaletteTemplate)(uint)((ListBoxItem)PaletteTemplates.SelectedItem).DataContext;
-            ModelViewer.LoadModel(setupId, CurrentClothingItem, paletteTemplate, shade);
-        }
-
-        private void Shades_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Shades.Visibility == Visibility.Hidden) return; if (_customActive) return; LoadModelWithClothingBase();
-        }
-
-        public class VctInfo { public uint PalId; public uint Color; }
-
-        public static List<VctInfo> GetVirindiColorToolInfo()
-        {
-            var result = new List<VctInfo>(); if (CurrentClothingItem == null) return result;
-            if (_customActive && _customCloSubPalettes != null)
-            {
-                foreach (var subPal in _customCloSubPalettes)
+                var palTemplate = CurrentClothingItem.ClothingSubPalEffects.Keys.FirstOrDefault();
+                if (palTemplate != 0 && CurrentClothingItem.ClothingSubPalEffects.TryGetValue(palTemplate, out var effect))
                 {
-                    uint paletteID = subPal.PaletteSet;
-                    foreach (var r in subPal.Ranges)
+                    foreach (var sp in effect.CloSubPalettes)
                     {
-                        uint mid = Convert.ToUInt32(r.NumColors / 2); uint colorIdx = r.Offset + mid; uint color = 0;
-                        if (paletteID >> 24 == 0xF)
-                        { var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(paletteID); var palId = palSet.GetPaletteID(_customShade); var palette = DatManager.PortalDat.ReadFromDat<Palette>(palId); if (palette.Colors.Count >= colorIdx) color = palette.Colors[(int)colorIdx] & 0xFFFFFF; result.Add(new VctInfo { PalId = palId & 0xFFFF, Color = color }); }
-                        else { var palette = DatManager.PortalDat.ReadFromDat<Palette>(paletteID); if (palette.Colors.Count >= colorIdx) color = palette.Colors[(int)colorIdx] & 0xFFFFFF; result.Add(new VctInfo { PalId = paletteID & 0xFFFF, Color = color }); }
+                        // For a palette set, fetch first palette; for raw palette use directly
+                        uint palId = sp.PaletteSet;
+                        if ((palId >> 24) == 0x0F)
+                        {
+                            var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(palId);
+                            if (set?.PaletteList?.Count > 0) palId = set.PaletteList[0];
+                        }
+                        var pal = DatManager.PortalDat.ReadFromDat<Palette>(palId);
+                        if (pal?.Colors?.Count > 0)
+                        {
+                            // Use first color as representative
+                            list.Add(new VirindiColorInfo { PalId = palId, Color = pal.Colors[0] & 0xFFFFFF });
+                        }
                     }
                 }
-                return result;
             }
-            if (CurrentClothingItem.ClothingSubPalEffects.Count == 0) return result; if (!CurrentClothingItem.ClothingSubPalEffects.ContainsKey(PaletteTemplate)) return result; if (float.IsNaN(Shade)) Shade = 0;
-            Icon = CurrentClothingItem.GetIcon(PaletteTemplate); var palEffects = CurrentClothingItem.ClothingSubPalEffects[PaletteTemplate];
-            foreach (var subPal in palEffects.CloSubPalettes)
-            {
-                uint paletteID;
-                Palette palette;
-                if ((subPal.PaletteSet >> 24) == 0x0F)
-                {
-                    // Proper palette set: resolve shade-specific palette
-                    var palSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(subPal.PaletteSet);
-                    paletteID = palSet.GetPaletteID(Shade);
-                    palette = DatManager.PortalDat.ReadFromDat<Palette>(paletteID);
-                }
-                else
-                {
-                    // Direct palette id (imported JSON can specify these): no shade selection
-                    paletteID = subPal.PaletteSet;
-                    palette = DatManager.PortalDat.ReadFromDat<Palette>(paletteID);
-                }
-
-                foreach (var r in subPal.Ranges)
-                {
-                    uint mid = Convert.ToUInt32(r.NumColors / 2); uint colorIdx = r.Offset + mid; uint color = 0;
-                    if (palette.Colors.Count >= colorIdx) color = palette.Colors[(int)colorIdx];
-                    result.Add(new VctInfo { PalId = paletteID & 0xFFFF, Color = color & 0xFFFFFF });
-                }
-            }
-            return result;
+            catch { }
+            return list;
         }
 
-        public static uint GetIcon() => CurrentClothingItem.GetIcon(PaletteTemplate);
+        public static uint GetIcon() => Icon;
 
         private void BtnImportJson_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog { Filter = "Clothing JSON (*.json)|*.json", Title = "Import Clothing Table JSON" };
+            var dlg = new OpenFileDialog { Filter = "Clothing JSON (*.json)|*.json", Title = "Import Clothing JSON" };
             if (dlg.ShowDialog() != true) return;
             try
             {
                 var imported = CustomTextureStore.ImportClothingTable(dlg.FileName);
-                if (imported == null || imported.ClothingBaseEffects.Count == 0)
-                { MessageBox.Show("Imported file contained no clothing base effects.", "Import", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-                CurrentClothingItem = imported;
-                SetupIds.Items.Clear(); PaletteTemplates.Items.Clear(); ResetShadesSlider(); _customActive = false; _lastActualPaletteTemplate = null;
-                foreach (var cbe in imported.ClothingBaseEffects.Keys.OrderBy(i => i))
-                    SetupIds.Items.Add(new ListBoxItem { Content = cbe.ToString("X8"), DataContext = cbe });
-                PaletteTemplates.Items.Add(new ListBoxItem { Content = "None", DataContext = (uint)0 });
-                foreach (var subPal in imported.ClothingSubPalEffects.Keys.OrderBy(i => i))
-                    PaletteTemplates.Items.Add(new ListBoxItem { Content = (PaletteTemplate)subPal + " - " + subPal, DataContext = subPal });
-                PaletteTemplates.Items.Add(new ListBoxItem { Content = "Custom...", DataContext = CustomPaletteKey });
-                if (SetupIds.Items.Count > 0) SetupIds.SelectedIndex = 0; if (PaletteTemplates.Items.Count > 0) PaletteTemplates.SelectedIndex = 0;
-                LoadModelWithClothingBase();
-                MainWindow.Status.WriteLine($"Imported clothing JSON: {System.IO.Path.GetFileName(dlg.FileName)}");
+                if (imported == null)
+                {
+                    MainWindow.Instance.AddStatusText("Import failed: empty file");
+                    return;
+                }
+                OnClickClothingBase(imported, imported.Id, null, null);
+                ForceOpenPaletteEditorAfterImport();
+                MainWindow.Instance.AddStatusText($"Imported clothing JSON: {System.IO.Path.GetFileName(dlg.FileName)}");
+                _lastImportedJsonPath = dlg.FileName;
+                CustomTextureStore.WatchClothingJson(dlg.FileName);
             }
             catch (Exception ex)
-            { MessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+            {
+                MessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var session = ClothingEditingSession.Instance;
+            switch (e.NewValue)
+            {
+                case SubPaletteEffectVM spe:
+                    session.SelectedSubPaletteEffect = spe;
+                    session.SelectedCloSubPalette = null;
+                    break;
+                case CloSubPaletteVM csp:
+                    session.SelectedCloSubPalette = csp;
+                    // also set parent effect for context operations
+                    var root = session.SelectedClothing?.BaseEffects.FirstOrDefault(b => b.BaseId == 0xFFFFFFFF);
+                    if (root != null)
+                    {
+                        foreach (var spe2 in root.SubPaletteEffects)
+                            if (spe2.CloSubPalettes.Contains(csp)) { session.SelectedSubPaletteEffect = spe2; break; }
+                    }
+                    break;
+                default:
+                    session.SelectedSubPaletteEffect = null;
+                    session.SelectedCloSubPalette = null;
+                    break;
+            }
         }
     }
 }
