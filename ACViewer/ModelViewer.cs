@@ -50,6 +50,131 @@ namespace ACViewer
 
         public ModelType ModelType { get; set; }
 
+        // === Reflection / Ground Plane Support ===
+        public static bool ShowReflectionPlane { get; set; } = true;   // toggle-able later via options
+        private BasicEffect _groundEffect;
+        private VertexBuffer _groundVB;
+        private IndexBuffer _groundIB;
+        private float _groundZ;
+        private float _groundSize;
+        private uint _groundSetupId; // track if setup changed
+
+        private void EnsureGroundResources()
+        {
+            if (!ShowReflectionPlane || Setup == null) return;
+            var id = Setup.Setup._setup.Id;
+            if (_groundVB != null && _groundSetupId == id) return;
+
+            _groundSetupId = id;
+
+            Vector3 min = new Vector3(float.MaxValue);
+            Vector3 max = new Vector3(float.MinValue);
+            bool found = false;
+            try
+            {
+                var bb = Setup.Setup.BoundingBox;
+                var t = bb.GetType();
+                var minProp = t.GetProperty("Min");
+                var maxProp = t.GetProperty("Max");
+                if (minProp != null && maxProp != null)
+                {
+                    var minVal = (Vector3)minProp.GetValue(bb);
+                    var maxVal = (Vector3)maxProp.GetValue(bb);
+                    min = minVal; max = maxVal; found = true;
+                }
+            }
+            catch { }
+
+            if (!found)
+            {
+                var verts = Setup.Setup.GetVertices();
+                foreach (var p in verts)
+                {
+                    if (p.X < min.X) min.X = p.X; if (p.Y < min.Y) min.Y = p.Y; if (p.Z < min.Z) min.Z = p.Z;
+                    if (p.X > max.X) max.X = p.X; if (p.Y > max.Y) max.Y = p.Y; if (p.Z > max.Z) max.Z = p.Z;
+                }
+                if (verts.Count == 0)
+                {
+                    min = new Vector3(-0.5f); max = new Vector3(0.5f);
+                }
+            }
+
+            _groundZ = min.Z;
+            _groundSize = Math.Max(Math.Max(max.X - min.X, max.Y - min.Y), (max.Z - min.Z)) * 2f;
+            if (_groundSize <= 0) _groundSize = 1f;
+
+            var color = new Color(64, 64, 72, 160);
+            var vertsPlane = new VertexPositionColor[]
+            {
+                new VertexPositionColor(new Vector3(-_groundSize, -_groundSize, _groundZ), color),
+                new VertexPositionColor(new Vector3( _groundSize, -_groundSize, _groundZ), color),
+                new VertexPositionColor(new Vector3( _groundSize,  _groundSize, _groundZ), color),
+                new VertexPositionColor(new Vector3(-_groundSize,  _groundSize, _groundZ), color)
+            };
+            _groundVB = new VertexBuffer(GraphicsDevice, typeof(VertexPositionColor), vertsPlane.Length, BufferUsage.WriteOnly);
+            _groundVB.SetData(vertsPlane);
+            var indices = new ushort[] { 0,1,2, 2,3,0 };
+            _groundIB = new IndexBuffer(GraphicsDevice, IndexElementSize.SixteenBits, indices.Length, BufferUsage.WriteOnly);
+            _groundIB.SetData(indices);
+
+            _groundEffect ??= new BasicEffect(GraphicsDevice)
+            {
+                LightingEnabled = false,
+                VertexColorEnabled = true,
+                TextureEnabled = false,
+                PreferPerPixelLighting = false,
+                FogEnabled = false
+            };
+        }
+
+        private void DrawGroundPlane()
+        {
+            if (!ShowReflectionPlane || _groundVB == null || _groundIB == null) return;
+
+            _groundEffect.World = Matrix.Identity;
+            _groundEffect.View = Camera.ViewMatrix;
+            _groundEffect.Projection = Camera.ProjectionMatrix;
+
+            foreach (var pass in _groundEffect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.SetVertexBuffer(_groundVB);
+                GraphicsDevice.Indices = _groundIB;
+                GraphicsDevice.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, 2);
+            }
+        }
+
+        private void DrawReflection()
+        {
+            if (!ShowReflectionPlane || Setup == null || ViewObject == null) return;
+            var world = Matrix.CreateScale(1f, 1f, -1f) * Matrix.CreateTranslation(0f, 0f, 2f * _groundZ);
+            Effect.Parameters["xWorld"].SetValue(world);
+            Effect_Clamp.Parameters["xWorld"].SetValue(world);
+
+            var prevBlend = GraphicsDevice.BlendState;
+            var prevRaster = GraphicsDevice.RasterizerState;
+            var prevDepth = GraphicsDevice.DepthStencilState;
+
+            GraphicsDevice.BlendState = BlendState.AlphaBlend;
+            GraphicsDevice.RasterizerState = new RasterizerState { CullMode = Microsoft.Xna.Framework.Graphics.CullMode.None };
+            GraphicsDevice.DepthStencilState = DepthStencilState.Default;
+
+            Effect.Parameters["xOpacity"].SetValue(0.45f);
+            Effect_Clamp.Parameters["xOpacity"].SetValue(0.45f);
+
+            Setup.Draw(PolyIdx, PartIdx);
+
+            Effect.Parameters["xWorld"].SetValue(Matrix.Identity);
+            Effect_Clamp.Parameters["xWorld"].SetValue(Matrix.Identity);
+            Effect.Parameters["xOpacity"].SetValue(1.0f);
+            Effect_Clamp.Parameters["xOpacity"].SetValue(1.0f);
+
+            GraphicsDevice.BlendState = prevBlend;
+            GraphicsDevice.RasterizerState = prevRaster;
+            GraphicsDevice.DepthStencilState = prevDepth;
+        }
+        // === End Reflection Support ===
+
         public ModelViewer()
         {
             Instance = this;
@@ -68,7 +193,7 @@ namespace ACViewer
             InitObject(id);
 
             Camera.InitModel(Setup.Setup.BoundingBox);
-
+            EnsureGroundResources();
             ModelType = ModelType.Setup;
         }
 
@@ -82,7 +207,6 @@ namespace ACViewer
             // assumed to be in Setup mode for ClothingBase
             GfxObjMode = false;
 
-            // create the ObjDesc, describing any changes to palettes / textures / gfxobj parts
             var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase.Id, paletteTemplate, shade); // disambiguated
 
             Setup = new SetupInstance(setupID, objDesc);
@@ -90,10 +214,9 @@ namespace ACViewer
             if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
             {
                 InitObject(setupID);
-
                 Camera.InitModel(Setup.Setup.BoundingBox);
             }
-
+            EnsureGroundResources();
             ModelType = ModelType.Setup;
 
             MainWindow.Status.WriteLine($"Loading {setupID:X8} with ClothingBase {clothingBase.Id:X8}, PaletteTemplate {paletteTemplate}, and Shade {shade}");
@@ -104,10 +227,8 @@ namespace ACViewer
         {
             TextureCache.Init();
 
-            // assumed to be in Setup mode for ClothingBase
             GfxObjMode = false;
 
-            // create the ObjDesc, describing any changes to palettes / textures / gfxobj parts
             var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase.Id, PaletteTemplate.Undef, 0.0f);
             if (customSubPalettes != null && customSubPalettes.Count > 0)
             {
@@ -118,10 +239,9 @@ namespace ACViewer
             if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
             {
                 InitObject(setupID);
-
                 Camera.InitModel(Setup.Setup.BoundingBox);
             }
-
+            EnsureGroundResources();
             ModelType = ModelType.Setup;
 
             MainWindow.Status.WriteLine($"Loading {setupID:X8} with CUSTOM palettes count={customSubPalettes?.Count} Shade {shade}");
@@ -137,8 +257,6 @@ namespace ACViewer
 
         public void LoadEnvCell(uint envCellID)
         {
-            // TODO: this should be more like WorldViewer, with support for various StaticObjects and their PhysicsEffects in the EnvCell
-
             var envCell = new ACE.Server.Physics.Common.EnvCell(DatManager.CellDat.ReadFromDat<EnvCell>(envCellID));
             envCell.Pos = new ACE.Server.Physics.Common.Position();
             EnvCell = new R_EnvCell(envCell);
@@ -253,6 +371,15 @@ namespace ACViewer
 
             GraphicsDevice.Clear(ConfigManager.Config.BackgroundColors.ModelViewer);
 
+            EnsureGroundResources();
+
+            // Draw reflection first (so real model overwrites where depths match)
+            DrawReflection();
+
+            // Draw ground plane beneath
+            DrawGroundPlane();
+
+            // Draw actual model
             Setup.Draw(PolyIdx, PartIdx);
 
             if (ViewObject.PhysicsObj.ParticleManager != null)

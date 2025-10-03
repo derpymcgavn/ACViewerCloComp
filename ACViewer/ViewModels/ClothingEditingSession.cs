@@ -8,6 +8,7 @@ using ACE.DatLoader; // for DatManager
 using ACE.DatLoader.FileTypes; // for future expansion
 using ACViewer.CustomPalettes; // for RangeDef reuse if desired
 using ACE.DatLoader.Entity; // clothing table types live here
+using ACViewer.CustomTextures;
 
 namespace ACViewer.ViewModels
 {
@@ -23,6 +24,42 @@ namespace ACViewer.ViewModels
 
         public ObservableCollection<ClothingTableVM> ClothingItems { get; } = new();
         public ObservableCollection<SetupVM> Setups { get; } = new();
+
+        // Single source-of-truth properties
+        private ACE.DatLoader.FileTypes.ClothingTable _currentClothingRaw;
+        public ACE.DatLoader.FileTypes.ClothingTable CurrentClothingRaw
+        {
+            get => _currentClothingRaw;
+            set
+            {
+                if (!Equals(_currentClothingRaw, value))
+                {
+                    _currentClothingRaw = value;
+                    OnPropertyChanged();
+                    // Clear some dependent state when switching clothing
+                    ActivePaletteDefinition = null;
+                    ActiveTextureOverrides = null;
+                    IsDirty = false;
+                }
+            }
+        }
+
+        private CustomPaletteDefinition _activePaletteDefinition;
+        public CustomPaletteDefinition ActivePaletteDefinition
+        {
+            get => _activePaletteDefinition;
+            set { if (_activePaletteDefinition != value) { _activePaletteDefinition = value; OnPropertyChanged(); } }
+        }
+
+        private CustomTextureDefinition _activeTextureOverrides;
+        public CustomTextureDefinition ActiveTextureOverrides
+        {
+            get => _activeTextureOverrides;
+            set { if (_activeTextureOverrides != value) { _activeTextureOverrides = value; OnPropertyChanged(); } }
+        }
+
+        private bool _isDirty;
+        public bool IsDirty { get => _isDirty; set { if (_isDirty != value) { _isDirty = value; OnPropertyChanged(); } } }
 
         // Simple incremental allocators for new local IDs (kept outside real DAT range regions user cares about)
         private uint _nextClothingId = 0x10FF0000; // 0x10 = clothing file type
@@ -83,6 +120,7 @@ namespace ACViewer.ViewModels
             var vm = new ClothingTableVM { Id = id, IsModified = true };
             ClothingItems.Add(vm);
             SelectedClothing = vm;
+            IsDirty = true;
         }
 
         private void CloneSelectedClothing()
@@ -109,6 +147,7 @@ namespace ACViewer.ViewModels
             }
             ClothingItems.Add(clone);
             SelectedClothing = clone;
+            IsDirty = true;
         }
 
         private void DeleteSelectedClothing()
@@ -117,6 +156,7 @@ namespace ACViewer.ViewModels
             var idx = ClothingItems.IndexOf(SelectedClothing);
             ClothingItems.Remove(SelectedClothing);
             SelectedClothing = ClothingItems.Count > 0 ? ClothingItems[Math.Max(0, idx - 1)] : null;
+            IsDirty = true;
         }
 
         private void AddSubPaletteEffect()
@@ -134,6 +174,7 @@ namespace ACViewer.ViewModels
             var spe = new SubPaletteEffectVM { EffectId = newId, IsModified = true };
             root.SubPaletteEffects.Add(spe);
             SelectedSubPaletteEffect = spe;
+            IsDirty = true;
         }
 
         private void AddCloSubPalette(SubPaletteEffectVM effect)
@@ -144,6 +185,7 @@ namespace ACViewer.ViewModels
             csp.Ranges.Add(new RangeVM { OffsetGroups = 0, LengthGroups = 1 });
             effect.CloSubPalettes.Add(csp);
             SelectedCloSubPalette = csp;
+            IsDirty = true;
         }
 
         private void DeleteCloSubPalette(CloSubPaletteVM vm)
@@ -159,6 +201,7 @@ namespace ACViewer.ViewModels
                     break;
                 }
             }
+            IsDirty = true;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

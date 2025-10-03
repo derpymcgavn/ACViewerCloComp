@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -22,6 +23,9 @@ using Microsoft.Win32;
 using ACViewer.View.Controls;
 using System.IO;
 using System.Windows.Threading;
+using System.Windows.Data;
+using ACViewer.Converters;
+using System.Threading; // added for CancellationTokenSource
 
 namespace ACViewer.View
 {
@@ -51,22 +55,25 @@ namespace ACViewer.View
         private const int PreviewWidth = 512; private const int PreviewHeight = 48;
         private PaletteSet _currentSet; private int _currentSetIndex;
 
-        private CheckBox chkMulti; private TextBox txtPaletteId; private TextBox txtSearch; private ListBox lstPalettes; private System.Windows.Controls.Image imgBigPreview; private StackPanel panelSetBrowse; private TextBlock lblSetIndex; private Slider sldSetIndex; private Button btnUseSetPalette; private StackPanel panelSingle; private TextBox txtRanges; private StackPanel panelMulti; private TextBox txtMulti; private TextBox txtShade; private Slider sldShade; private Button btnOk; private Button btnSave; private Button btnLoad; private Button btnExport; private System.Windows.Controls.Image imgRangePreview; private TextBox txtColorSearch; private Button btnColorFind; private TextBlock lblColorResult; private ListView _lstRanges;
+        private TextBox txtPaletteId; private TextBox txtSearch; private ListBox lstPalettes; private System.Windows.Controls.Image imgBigPreview; private StackPanel panelSetBrowse; private TextBlock lblSetIndex; private Slider sldSetIndex; private Button btnUseSetPalette; private StackPanel panelSingle; private TextBox txtRanges; private StackPanel panelMulti; private TextBox txtMulti; private TextBox txtShade; private Slider sldShade; private Button btnOk; private Button btnSave; private Button btnLoad; private Button btnExport; private System.Windows.Controls.Image imgRangePreview; private TextBox txtColorSearch; private Button btnColorFind; private TextBlock lblColorResult; private ListView _lstRanges;
         private RangeEditorControl _rangeEditor; private Border _rangeEditorHost; private Button _btnRangeUndo; private Button _btnRangeRedo;
 
-        private class RangeDisplay { public uint PaletteId { get; set; } public uint Offset { get; set; } public uint Length { get; set; } public string PaletteHex => $"0x{PaletteId:X8}"; public string OffsetLength => $"{Offset}:{Length}"; }
+        private class RangeDisplay { public uint PaletteId { get; set; } public uint Offset { get; set; } public uint Length { get; set; } public string OffsetLength => $"{Offset}:{Length}"; }
         private class PaletteEntryRow : INotifyPropertyChanged
-        { private uint _paletteSetId; private string _rangesText; private bool _isLocked; public uint PaletteSetId { get => _paletteSetId; set { if (_paletteSetId != value) { _paletteSetId = value; OnPropertyChanged(nameof(PaletteSetId)); OnPropertyChanged(nameof(PaletteHex)); } } } public string RangesText { get => _rangesText; set { if (_rangesText != value) { _rangesText = value; OnPropertyChanged(nameof(RangesText)); } } } public bool IsLocked { get => _isLocked; set { if (_isLocked != value) { _isLocked = value; OnPropertyChanged(nameof(IsLocked)); } } } public string PaletteHex => $"0x{PaletteSetId:X8}"; public event PropertyChangedEventHandler PropertyChanged; private void OnPropertyChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n)); }
+        { private uint _paletteSetId; private string _rangesText; private bool _isLocked; public uint PaletteSetId { get => _paletteSetId; set { if (_paletteSetId != value) { _paletteSetId = value; OnPropertyChanged(nameof(PaletteSetId)); } } } public string RangesText { get => _rangesText; set { if (_rangesText != value) { _rangesText = value; OnPropertyChanged(nameof(RangesText)); } } } public bool IsLocked { get => _isLocked; set { if (_isLocked != value) { _isLocked = value; OnPropertyChanged(nameof(IsLocked)); } } } public event PropertyChangedEventHandler PropertyChanged; private void OnPropertyChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n)); }
 
         private ObservableCollection<PaletteEntryRow> _rows = new(); private DataGrid _gridEntries; private Button _btnAddRow; private Button _btnRemoveRow; private bool _freezeLines; private CheckBox _chkLockAll;
 
         private class TextureRow { public int PartIndex { get; set; } public uint OldId { get; set; } public uint NewId { get; set; } public bool IsLocked { get; set; } public string OldHex => $"0x{OldId:X8}"; public string NewHex => $"0x{NewId:X8}"; }
-        private readonly List<TextureRow> _textureRows = new(); private List<uint> _availableTextureIds = new(); private ListBox lstTextures; private DataGrid gridTextures; private CheckBox chkTexLockAll; private Button btnTexAdd; private Button btnTexRemove; private Button btnTexSave; private Button btnTexLoad; private Button btnTexOk; private TextBox txtTexSearch; private System.Windows.Controls.Image imgTexPreviewOld; private System.Windows.Controls.Image imgTexPreviewNew; private TabControl _tabControl; private TabControl _rootTabs; private DateTime _lastAutosave = DateTime.MinValue; private static readonly TimeSpan AutosaveInterval = TimeSpan.FromSeconds(2); private const string AutosaveFile = "CustomPalette.autosave.json";
+        private readonly List<TextureRow> _textureRows = new(); private List<uint> _availableTextureIds = new(); private ListBox lstTextures; private DataGrid gridTextures; private CheckBox chkTexLockAll; private Button btnTexAdd; private Button btnTexRemove; private Button btnTexSave; private Button btnTexLoad; private Button btnTexOk; private TextBox txtTexSearch; private System.Windows.Controls.Image imgTexPreviewOld; private System.Windows.Controls.Image imgTexPreviewNew; private TabControl _tabControl; private TabControl _rootTabs; private DateTime _lastAutosave = DateTime.MinValue; private static readonly TimeSpan AutosaveInterval = TimeSpan.FromSeconds(2); private const string AutosaveFile = "CustomPalette.autosave.json"; private const string LiveSnapshotFile = "CustomPalette.current.json"; // added snapshot for immediate export
 
         // Disco
         private string _discoBuffer = string.Empty; private DispatcherTimer _discoTimer; private bool _discoMode; private readonly Random _discoRand = new();
 
         private bool _hasClothing; // gate enabling of UI until clothing item active
+
+        // Live save debounce
+        private CancellationTokenSource _liveSaveCts; private static readonly TimeSpan LiveSaveDelay = TimeSpan.FromMilliseconds(600);
 
         public CustomPaletteDialog()
         {
@@ -83,7 +90,7 @@ namespace ACViewer.View
         private void DiscoTick(object sender, EventArgs e) { byte r = (byte)_discoRand.Next(64, 256); byte g = (byte)_discoRand.Next(64, 256); byte b = (byte)_discoRand.Next(64, 256); Background = new SolidColorBrush(Color.FromRgb(r, g, b)); if (imgBigPreview != null) imgBigPreview.Opacity = (_discoRand.NextDouble() * 0.3) + 0.7; }
 
         private void InitializeCore()
-        { PopulateList(); if (StartingDefinition != null) { ApplyLoadedPreset(StartingDefinition); if (StartingDefinition.Multi) chkMulti.IsChecked = true; } else { SyncRowsFromText(); SyncTextLinesFromRows(); } _freezeLines = false; HookLiveEvents(); UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList(); InitTextureTabData(); PopulateSetupIds(); SyncRangeEditorFromRow(); }
+        { PopulateList(); if (StartingDefinition != null) { ApplyLoadedPreset(StartingDefinition); } else { SyncRowsFromText(); SyncTextLinesFromRows(); } _freezeLines = false; HookLiveEvents(); UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList(); InitTextureTabData(); PopulateSetupIds(); SyncRangeEditorFromRow(); }
 
         public void SetHasClothing(bool hasClothing)
         {
@@ -120,11 +127,68 @@ namespace ACViewer.View
         public (UIElement palette, UIElement textures) GetDockParts() { DetachFromParent(PaletteDockContent); DetachFromParent(TextureDockContent); return (PaletteDockContent, TextureDockContent); }
         public void InitializeForDock() => InitializeCore();
 
-        private void HookLiveEvents() { if (txtPaletteId != null) txtPaletteId.TextChanged += (_, __) => DoLiveUpdate(); if (txtRanges != null) txtRanges.TextChanged += (_, __) => DoLiveUpdate(); if (sldShade != null) sldShade.ValueChanged += (_, __) => DoLiveUpdate(); }
-        private void Autosave(CustomPaletteDefinition def) { if (def == null) return; if (DateTime.UtcNow - _lastAutosave < AutosaveInterval) return; _lastAutosave = DateTime.UtcNow; try { var json = System.Text.Json.JsonSerializer.Serialize(def, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }); File.WriteAllText(AutosaveFile, json); } catch { } }
-        private void DoLiveUpdate() { if (TryBuildDefinition(out var def)) { OnLiveUpdate?.Invoke(def); Autosave(def); ResultDefinition = def; } }
+        private void HookLiveEvents()
+        {
+            if (txtPaletteId != null) txtPaletteId.TextChanged += async (_, __) => await DoLiveUpdateAsync();
+            if (txtRanges != null) txtRanges.TextChanged += async (_, __) => await DoLiveUpdateAsync();
+            if (sldShade != null) sldShade.ValueChanged += async (_, __) => await DoLiveUpdateAsync();
+        }
 
-        private bool TryBuildDefinition(out CustomPaletteDefinition def) { def = null; try { var tmp = new CustomPaletteDefinition { Multi = true, Shade = ParseFloat(txtShade.Text.Trim(), 0) }; foreach (var row in _rows) { var rangeSpec = row.RangesText.Replace(',', ' '); var entry = new CustomPaletteEntry { PaletteSetId = row.PaletteSetId, Ranges = RangeParser.ParseRanges(rangeSpec) }; if (entry.Ranges.Count == 0) return false; tmp.Entries.Add(entry); } if (tmp.Entries.Count == 0) return false; def = tmp; return true; } catch { return false; } }
+        private async Task DoLiveUpdateAsync()
+        {
+            // Debounce a bit to avoid excessive updates while typing
+            await Task.Delay(80);
+            DoLiveUpdate(); // existing synchronous builder + OnLiveUpdate invocation
+        }
+
+        private void Autosave(CustomPaletteDefinition def) { if (def == null) return; if (DateTime.UtcNow - _lastAutosave < AutosaveInterval) return; _lastAutosave = DateTime.UtcNow; try { var json = System.Text.Json.JsonSerializer.Serialize(def, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }); File.WriteAllText(AutosaveFile, json); } catch { } }
+        private void DoLiveUpdate() { if (TryBuildDefinition(out var def)) { OnLiveUpdate?.Invoke(def); Autosave(def); ResultDefinition = def; ScheduleLiveSave(); } }
+
+        private void ScheduleLiveSave()
+        {
+            // Only live-save if the definition has a name (i.e., user saved or loaded a named preset)
+            if (ResultDefinition == null || string.IsNullOrWhiteSpace(ResultDefinition.Name)) return;
+            _liveSaveCts?.Cancel();
+            var cts = new CancellationTokenSource();
+            _liveSaveCts = cts;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(LiveSaveDelay, cts.Token);
+                    if (cts.IsCancellationRequested) return;
+                    // Persist current definition (update / replace by name)
+                    try { CustomPaletteStore.SaveDefinition(ResultDefinition); } catch { /* ignore IO errors for live mode */ }
+                }
+                catch (TaskCanceledException) { }
+            });
+        }
+
+        private bool TryBuildDefinition(out CustomPaletteDefinition def)
+        {
+            def = null;
+            try
+            {
+                var tmp = new CustomPaletteDefinition { Shade = ParseFloat(txtShade.Text.Trim(), 0) };
+                // Preserve existing name (so live save updates same record)
+                if (ResultDefinition != null && !string.IsNullOrWhiteSpace(ResultDefinition.Name)) tmp.Name = ResultDefinition.Name; else if (StartingDefinition != null && !string.IsNullOrWhiteSpace(StartingDefinition.Name)) tmp.Name = StartingDefinition.Name;
+                foreach (var row in _rows)
+                {
+                    var rangeSpec = row.RangesText.Replace(',', ' ');
+                    var entry = new CustomPaletteEntry { PaletteSetId = row.PaletteSetId, Ranges = RangeParser.ParseRanges(rangeSpec) };
+                    if (entry.Ranges.Count == 0) return false;
+                    tmp.Entries.Add(entry);
+                }
+                if (tmp.Entries.Count == 0) return false;
+
+                // derive Multi from number of entries
+                tmp.Multi = tmp.Entries.Count > 1;
+
+                def = tmp;
+                return true;
+            }
+            catch { return false; }
+        }
 
         private void PopulateList() { if (AvailablePaletteIDs == null || lstPalettes == null) return; lstPalettes.Items.Clear(); foreach (var id in AvailablePaletteIDs) lstPalettes.Items.Add(BuildPaletteListItem(id)); }
         private ListBoxItem BuildPaletteListItem(uint id) { var sp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) }; var img = new System.Windows.Controls.Image { Width = 220, Height = 14, Stretch = Stretch.Fill, SnapsToDevicePixels = true }; img.Source = BuildPaletteBitmap(id, 220, 14); sp.Children.Add(img); sp.Children.Add(new TextBlock { Text = $" 0x{id:X8}", VerticalAlignment = VerticalAlignment.Center }); return new ListBoxItem { Content = sp, Tag = id, ToolTip = $"0x{id:X8}" }; }
@@ -132,7 +196,7 @@ namespace ACViewer.View
         private void UpdateBigPreviewImage() { if (imgBigPreview == null) return; if (_currentSet != null) { if (_currentSet.PaletteList == null || _currentSet.PaletteList.Count == 0) { imgBigPreview.Source = null; return; } var safeIndex = Math.Clamp(_currentSetIndex, 0, _currentSet.PaletteList.Count - 1); var palId = _currentSet.PaletteList[safeIndex]; imgBigPreview.Source = BuildPaletteBitmap(palId, PreviewWidth, PreviewHeight); return; } else if (lstPalettes?.SelectedItem is ListBoxItem li) { imgBigPreview.Source = BuildPaletteBitmap((uint)li.Tag, PreviewWidth, PreviewHeight); } }
 
         private void UpdateRangeHighlight() { if (imgRangePreview == null) return; Palette palette = null; uint actualPaletteId = 0; string rangeSpec = null; if (_gridEntries != null && _gridEntries.SelectedItem is PaletteEntryRow row) { uint palId = row.PaletteSetId; actualPaletteId = palId; if ((palId >> 24) == 0xF) { try { var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(palId); if (set != null && set.PaletteList.Count > 0) actualPaletteId = set.PaletteList[0]; } catch { imgRangePreview.Source = null; return; } } try { palette = DatManager.PortalDat.ReadFromDat<Palette>(actualPaletteId); } catch { palette = null; } rangeSpec = row.RangesText.Replace(',', ' '); } else { if (txtMulti == null) return; var text = txtMulti.Text; if (string.IsNullOrWhiteSpace(text)) { imgRangePreview.Source = null; return; } int caret = txtMulti.CaretIndex; int lineStart = text.LastIndexOf('\n', Math.Clamp(caret - 1, 0, text.Length - 1)); if (lineStart == -1) lineStart = 0; else lineStart += 1; int lineEnd = text.IndexOf('\n', caret); if (lineEnd == -1) lineEnd = text.Length; var line = text.Substring(lineStart, lineEnd - lineStart).Trim(); if (string.IsNullOrWhiteSpace(line)) { imgRangePreview.Source = null; return; } var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries); if (parts.Length < 2) { imgRangePreview.Source = null; return; } uint palId; try { palId = ParseUInt(parts[0]); } catch { imgRangePreview.Source = null; return; } actualPaletteId = palId; if ((palId >> 24) == 0xF) { var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(palId); if (set != null && set.PaletteList.Count > 0) actualPaletteId = set.PaletteList[0]; } palette = DatManager.PortalDat.ReadFromDat<Palette>(actualPaletteId); rangeSpec = string.Join(" ", parts.Skip(1)); }
-            if (palette == null || palette.Colors.Count == 0 || rangeSpec == null) { imgRangePreview.Source = null; return; } var ranges = RangeParser.ParseRanges(rangeSpec, true, out _); int colors = palette.Colors.Count; int width = 512; int height = 64; var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null); var pixels = new byte[width * height * 4]; for (int x = 0; x < width; x++) { int palIdx = (int)((double)x / width * (colors - 1)); uint col = palette.Colors[palIdx]; byte a = (byte)((col >> 24) & 0xFF); if (a == 0) a = 0xFF; byte r = (byte)((col >> 16) & 0xFF); byte g = (byte)((col >> 8) & 0xFF); byte b = (byte)(col & 0xFF); bool highlighted = false; foreach (var rg in ranges) { var start = (int)rg.Offset * 8; var count = (int)rg.Length * 8; if (palIdx >= start && palIdx < start + count) { highlighted = true; break; } } if (highlighted) { r = (byte)Math.Min(255, r + 60); g = (byte)Math.Min(255, g + 60); b = (byte)Math.Min(255, b + 60); } for (int y = 0; y < height; y++) { int idx = (y * width + x) * 4; pixels[idx] = b; pixels[idx + 1] = g; pixels[idx + 2] = r; pixels[idx + 3] = a; } } wb.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0); imgRangePreview.Source = wb; }
+            if (palette == null || palette.Colors.Count == 0 || rangeSpec == null) { imgRangePreview.Source = null; return; } var ranges = RangeParser.ParseRanges(rangeSpec, true, out _); int colors = palette.Colors.Count; int width = 512; int height = 64; var wb2 = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null); var pixels2 = new byte[width * height * 4]; for (int x = 0; x < width; x++) { int palIdx = (int)((double)x / width * (colors - 1)); uint col = palette.Colors[palIdx]; byte a = (byte)((col >> 24) & 0xFF); if (a == 0) a = 0xFF; byte r = (byte)((col >> 16) & 0xFF); byte g = (byte)((col >> 8) & 0xFF); byte b = (byte)(col & 0xFF); bool highlighted = false; foreach (var rg in ranges) { var start = (int)rg.Offset * 8; var count = (int)rg.Length * 8; if (palIdx >= start && palIdx < start + count) { highlighted = true; break; } } if (highlighted) { r = (byte)Math.Min(255, r + 60); g = (byte)Math.Min(255, g + 60); b = (byte)Math.Min(255, b + 60); } for (int y = 0; y < height; y++) { int idx = (y * width + x) * 4; pixels2[idx] = b; pixels2[idx + 1] = g; pixels2[idx + 2] = r; pixels2[idx + 3] = a; } } wb2.WritePixels(new Int32Rect(0, 0, width, height), pixels2, width * 4, 0); imgRangePreview.Source = wb2; }
         private void RefreshRangeList() { if (_lstRanges == null) return; var items = new List<RangeDisplay>(); foreach (var row in _rows) { var ranges = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), true, out _); foreach (var r in ranges) items.Add(new RangeDisplay { PaletteId = row.PaletteSetId, Offset = r.Offset, Length = r.Length }); } _lstRanges.ItemsSource = items; }
 
         private void SyncRangeEditorFromRow() { if (_rangeEditor == null) return; if (_gridEntries?.SelectedItem is not PaletteEntryRow row) { _rangeEditor.SetPalette(null); _rangeEditor.SetRanges(Array.Empty<RangeDef>()); UpdateRangeUndoRedoButtons(); return; } uint palId = row.PaletteSetId; uint actual = palId; if ((palId >> 24) == 0xF) { try { var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(palId); if (set?.PaletteList?.Count > 0) actual = set.PaletteList[0]; } catch { } } Palette palette = null; try { palette = DatManager.PortalDat.ReadFromDat<Palette>(actual); } catch { } _rangeEditor.SetPalette(palette); var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), true, out _); _rangeEditor.SetRanges(parsed); UpdateRangeUndoRedoButtons(); }
@@ -163,7 +227,7 @@ namespace ACViewer.View
             else
             {
                 _currentSet = null;
-                if (panelSetBrowse != null) panelSetBrowse.Visibility = Visibility.Collapsed;
+                if (panelSetBrowse != null) panelSetBrowse.Visibility = System.Windows.Visibility.Collapsed;
             }
 
             if (_gridEntries != null && _gridEntries.SelectedItem is PaletteEntryRow row && !row.IsLocked)
@@ -185,12 +249,11 @@ namespace ACViewer.View
         private void sldSetIndex_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (_currentSet == null) return; _currentSetIndex = (int)sldSetIndex.Value; lblSetIndex.Text = $"Set Index: {_currentSetIndex}"; UpdateBigPreviewImage(); }
         private void btnUseSetPalette_Click(object sender, RoutedEventArgs e) { if (_currentSet == null) return; if (_currentSetIndex < 0 || _currentSetIndex >= _currentSet.PaletteList.Count) return; HighlightRangesForPalette(_currentSet.PaletteList[_currentSetIndex]); }
         private void txtSearch_TextChanged(object sender, TextChangedEventArgs e) { var filter = txtSearch.Text.Trim().ToLowerInvariant(); lstPalettes.BeginInit(); lstPalettes.Items.Clear(); foreach (var id in AvailablePaletteIDs) { var label = $"0x{id:X8}".ToLowerInvariant(); if (string.IsNullOrEmpty(filter) || label.Contains(filter)) lstPalettes.Items.Add(BuildPaletteListItem(id)); } lstPalettes.EndInit(); }
-        private void chkMulti_Checked(object sender, RoutedEventArgs e) => DoLiveUpdate();
         private void sldShade_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { txtShade.Text = sldShade.Value.ToString("0.###", CultureInfo.InvariantCulture); }
-        private void btnOk_Click(object sender, RoutedEventArgs e) { if (TryBuildDefinition(out var def)) { ResultDefinition = def; OnLiveUpdate?.Invoke(def); } else { MessageBox.Show("Invalid definition", "Custom Palette", MessageBoxButton.OK, MessageBoxImage.Error); } }
+        private void btnOk_Click(object sender, RoutedEventArgs e) { if (TryBuildDefinition(out var def)) { ResultDefinition = def; OnLiveUpdate?.Invoke(def); EnsureDefinitionHasName(def); PersistImmediate(def); ScheduleLiveSave(); } else { MessageBox.Show("Invalid definition", "Custom Palette", MessageBoxButton.OK, MessageBoxImage.Error); } }
         private void btnSave_Click(object sender, RoutedEventArgs e) { if (ResultDefinition == null && TryBuildDefinition(out var temp)) ResultDefinition = temp; if (ResultDefinition == null) return; var name = Microsoft.VisualBasic.Interaction.InputBox("Preset Name:", "Save Custom Palette", ResultDefinition.Name ?? "MyPreset"); if (string.IsNullOrWhiteSpace(name)) return; ResultDefinition.Name = name.Trim(); CustomPaletteStore.SaveDefinition(ResultDefinition); MessageBox.Show("Saved.", "Custom Palette", MessageBoxButton.OK, MessageBoxImage.Information); }
         private void btnLoad_Click(object sender, RoutedEventArgs e) { var defs = CustomPaletteStore.LoadAll().ToList(); if (defs.Count == 0) { MessageBox.Show("No saved presets.", "Custom Palette", MessageBoxButton.OK, MessageBoxImage.Information); return; } var picker = new PresetPickerWindow(defs); if (picker.ShowDialog() == true && picker.Selected != null) { ApplyLoadedPreset(picker.Selected); DoLiveUpdate(); } SyncRangeEditorFromRow(); }
-        public void ApplyLoadedPreset(CustomPaletteDefinition def) { if (def == null) return; if (chkMulti != null) chkMulti.IsChecked = true; _rows.Clear(); foreach (var e in def.Entries) { var rtxt = string.Join(",", e.Ranges.Select(r => $"{r.Offset}:{r.Length}")); _rows.Add(new PaletteEntryRow { PaletteSetId = e.PaletteSetId, RangesText = rtxt, IsLocked = _chkLockAll?.IsChecked == true }); } EnforceNonOverlappingRanges(); if (!_freezeLines) SyncTextLinesFromRows(); txtShade.Text = def.Shade.ToString("0.###", CultureInfo.InvariantCulture); sldShade.Value = def.Shade; ResultDefinition = def; UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList(); SyncRangeEditorFromRow(); UpdateRangeUndoRedoButtons(); }
+        public void ApplyLoadedPreset(CustomPaletteDefinition def) { if (def == null) return; _rows.Clear(); foreach (var e in def.Entries) { var rtxt = string.Join(",", e.Ranges.Select(r => $"{r.Offset}:{r.Length}")); _rows.Add(new PaletteEntryRow { PaletteSetId = e.PaletteSetId, RangesText = rtxt, IsLocked = _chkLockAll?.IsChecked == true }); } EnforceNonOverlappingRanges(); if (!_freezeLines) SyncTextLinesFromRows(); txtShade.Text = def.Shade.ToString("0.###", CultureInfo.InvariantCulture); sldShade.Value = def.Shade; ResultDefinition = def; UpdateBigPreviewImage(); UpdateRangeHighlight(); RefreshRangeList(); SyncRangeEditorFromRow(); UpdateRangeUndoRedoButtons(); }
         internal void ExternalLoadDefinition(CustomPaletteDefinition def, bool isLive) { ApplyLoadedPreset(def); if (isLive) DoLiveUpdate(); }
         private void GridEntries_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e) { if (e.Row?.Item is not PaletteEntryRow row) return; if (row.IsLocked) { e.Cancel = true; return; } if (e.EditingElement is TextBox tb) { row.RangesText = tb.Text.Trim(); EnforceNonOverlappingRanges(row.PaletteSetId); SyncTextLinesFromRows(); RefreshRangeList(); UpdateRangeHighlight(); DoLiveUpdate(); SyncRangeEditorFromRow(); } }
         private void GridEntries_BeginningEdit(object sender, DataGridBeginningEditEventArgs e) { if (e.Row?.Item is PaletteEntryRow row && row.IsLocked) e.Cancel = true; }
@@ -203,10 +266,34 @@ namespace ACViewer.View
 
         private void BtnExport_Click(object sender, RoutedEventArgs e) { try { var clothing = ClothingTableList.CurrentClothingItem; if (clothing == null) { MessageBox.Show("No clothing item loaded."); return; } var dlg = new SaveFileDialog { Filter = "JSON Files (*.json)|*.json", FileName = $"Clothing_{clothing.Id:X8}.json" }; if (dlg.ShowDialog() != true) return; CustomTextureStore.ExportClothingTable(clothing, dlg.FileName); MessageBox.Show("Export complete."); } catch (Exception ex) { MessageBox.Show($"Export failed: {ex.Message}"); } }
 
+        private void EnsureDefinitionHasName(CustomPaletteDefinition def)
+        {
+            if (def == null) return;
+            if (string.IsNullOrWhiteSpace(def.Name))
+            {
+                if (ResultDefinition != null && !string.IsNullOrWhiteSpace(ResultDefinition.Name))
+                    def.Name = ResultDefinition.Name; // reuse prior
+                if (string.IsNullOrWhiteSpace(def.Name))
+                    def.Name = $"Live_{DateTime.UtcNow:yyyyMMdd_HHmmss}"; // fallback unique name
+            }
+        }
+
+        private void PersistImmediate(CustomPaletteDefinition def)
+        {
+            if (def == null) return;
+            try { CustomPaletteStore.SaveDefinition(def); } catch { }
+            try
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(def, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(LiveSnapshotFile, json);
+            }
+            catch { }
+        }
+
         private static uint ParseUInt(string s) { if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return Convert.ToUInt32(s[2..], 16); if (uint.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex)) return hex; return uint.Parse(s, CultureInfo.InvariantCulture); }
         private static float ParseFloat(string s, float defVal) => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? Math.Clamp(f, 0f, 1f) : defVal;
         private void SyncRowsFromText() { _rows.Clear(); var text = txtMulti?.Text; if (string.IsNullOrWhiteSpace(text)) return; var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries); foreach (var line in lines) { var parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries); if (parts.Length < 2) continue; try { uint pal = ParseUInt(parts[0]); var ranges = string.Join(" ", parts.Skip(1)).Replace(' ', ','); _rows.Add(new PaletteEntryRow { PaletteSetId = pal, RangesText = ranges }); } catch { } } }
-        private void SyncTextLinesFromRows() { if (txtMulti == null) return; var caret = txtMulti.CaretIndex; var newText = string.Join(System.Environment.NewLine, _rows.Select(r => $"0x{r.PaletteSetId:X8} {r.RangesText.Replace(' ', ',')}``")); if (txtMulti.Text != newText) { txtMulti.Text = newText; if (caret <= txtMulti.Text.Length) txtMulti.CaretIndex = caret; } }
+        private void SyncTextLinesFromRows() { if (txtMulti == null) return; var caret = txtMulti.CaretIndex; var newText = string.Join(global::System.Environment.NewLine, _rows.Select(r => $"0x{r.PaletteSetId:X8} {r.RangesText.Replace(' ', ',')}``")); if (txtMulti.Text != newText) { txtMulti.Text = newText; if (caret <= txtMulti.Text.Length) txtMulti.CaretIndex = caret; } }
 
         private void SplitSelectedRangeToNewRow() { if (_lstRanges?.SelectedItem is not RangeDisplay rd) return; PaletteEntryRow sourceRow = null; List<RangeDef> sourceRanges = null; foreach (var row in _rows) { if (row.PaletteSetId != rd.PaletteId) continue; var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), true, out _); var match = parsed.FirstOrDefault(r => r.Offset == rd.Offset && r.Length == rd.Length); if (match != null) { sourceRow = row; sourceRanges = parsed; break; } } if (sourceRow == null || sourceRanges == null) return; var removed = sourceRanges.First(r => r.Offset == rd.Offset && r.Length == rd.Length); sourceRanges.Remove(removed); if (sourceRanges.Count == 0) _rows.Remove(sourceRow); else sourceRow.RangesText = string.Join(",", sourceRanges.Select(r => $"{r.Offset}:{r.Length}")); var newRow = new PaletteEntryRow { PaletteSetId = rd.PaletteId, RangesText = $"{rd.Offset}:{rd.Length}", IsLocked = _chkLockAll?.IsChecked == true }; _rows.Add(newRow); EnforceNonOverlappingRanges(rd.PaletteId); if (!_freezeLines) SyncTextLinesFromRows(); RefreshRangeList(); _gridEntries.Items.Refresh(); _gridEntries.SelectedItem = newRow; UpdateRangeHighlight(); SyncRangeEditorFromRow(); DoLiveUpdate(); }
         private void EnforceNonOverlappingRanges(uint? paletteFilter = null) { var groups = _rows.Where(r => !paletteFilter.HasValue || r.PaletteSetId == paletteFilter.Value).GroupBy(r => r.PaletteSetId); foreach (var g in groups) { var used = new HashSet<uint>(); var orderedRows = g.ToList(); foreach (var row in orderedRows) { var parsed = RangeParser.ParseRanges(row.RangesText.Replace(',', ' '), true, out _).OrderBy(r => r.Offset).ToList(); var rebuilt = new List<(uint off, uint len)>(); foreach (var r in parsed) { for (uint i = r.Offset; i < r.Offset + r.Length; i++) { if (!used.Add(i)) continue; if (rebuilt.Count == 0 || rebuilt[^1].off + rebuilt[^1].len != i) rebuilt.Add((i, 1)); else rebuilt[^1] = (rebuilt[^1].off, rebuilt[^1].len + 1); } } var newText = string.Join(",", rebuilt.Select(t => $"{t.off}:{t.len}")); if (string.IsNullOrEmpty(newText)) row.RangesText = string.Empty; else row.RangesText = newText; } var empty = orderedRows.Where(r => string.IsNullOrWhiteSpace(r.RangesText)).ToList(); foreach (var r in empty) _rows.Remove(r); } if (!_freezeLines) SyncTextLinesFromRows(); }
@@ -225,7 +312,7 @@ namespace ACViewer.View
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
             btnLoad = new Button { Content = "Load", Width = 70, Margin = new Thickness(0,0,6,0) }; btnLoad.Click += btnLoad_Click;
             btnSave = new Button { Content = "Save", Width = 70, Margin = new Thickness(0,0,6,0) }; btnSave.Click += btnSave_Click;
-            btnOk = new Button { Content = "Apply", Width = 80, Margin = new Thickness(0,0,6,0) }; btnOk.Click += btnOk_Click;
+            btnOk = new Button { Content = "Apply to JSON", Width = 110, Margin = new Thickness(0,0,6,0) }; btnOk.Click += btnOk_Click;
             btnExport = new Button { Content = "Export", Width = 80, Margin = new Thickness(0,0,6,0) }; btnExport.Click += BtnExport_Click;
             buttons.Children.Add(btnLoad); buttons.Children.Add(btnSave); buttons.Children.Add(btnOk); buttons.Children.Add(btnExport);
             DockPanel.SetDock(buttons, Dock.Bottom); palDock.Children.Add(buttons);
@@ -233,19 +320,23 @@ namespace ACViewer.View
             var mainGrid = new Grid(); mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) }); mainGrid.ColumnDefinitions.Add(new ColumnDefinition()); palDock.Children.Add(mainGrid);
             // Left
             var leftStack = new StackPanel(); mainGrid.Children.Add(leftStack);
-            // NEW: multi mode checkbox (was missing causing NRE)
-            chkMulti = new CheckBox { Content = "Multi", IsChecked = true, Margin = new Thickness(0,0,0,4) }; chkMulti.Checked += chkMulti_Checked; chkMulti.Unchecked += chkMulti_Checked; leftStack.Children.Add(chkMulti);
             leftStack.Children.Add(new TextBlock { Text = "Palettes", FontWeight = FontWeights.Bold });
             txtSearch = new TextBox { Height = 22, Margin = new Thickness(0,0,0,4) }; txtSearch.TextChanged += txtSearch_TextChanged; leftStack.Children.Add(txtSearch);
             lstPalettes = new ListBox { Height = 260 }; lstPalettes.SelectionChanged += lstPalettes_SelectionChanged; leftStack.Children.Add(lstPalettes);
-            _gridEntries = new DataGrid { AutoGenerateColumns = false, CanUserAddRows = false, ItemsSource = _rows, Height = 140, Margin = new Thickness(0,4,0,0) }; _gridEntries.SelectionChanged += (_, __) => { UpdateRangeHighlight(); SyncRangeEditorFromRow(); }; _gridEntries.CellEditEnding += GridEntries_CellEditEnding; _gridEntries.BeginningEdit += GridEntries_BeginningEdit; _gridEntries.Columns.Add(new DataGridCheckBoxColumn { Header = "L", Binding = new System.Windows.Data.Binding("IsLocked") }); _gridEntries.Columns.Add(new DataGridTextColumn { Header = "Palette", Binding = new System.Windows.Data.Binding("PaletteHex") }); _gridEntries.Columns.Add(new DataGridTextColumn { Header = "Ranges", Binding = new System.Windows.Data.Binding("RangesText") }); leftStack.Children.Add(_gridEntries);
+            _gridEntries = new DataGrid { AutoGenerateColumns = false, CanUserAddRows = false, ItemsSource = _rows, Height = 140, Margin = new Thickness(0,4,0,0) }; _gridEntries.SelectionChanged += (_, __) => { UpdateRangeHighlight(); SyncRangeEditorFromRow(); }; _gridEntries.CellEditEnding += GridEntries_CellEditEnding; _gridEntries.BeginningEdit += GridEntries_BeginningEdit; _gridEntries.Columns.Add(new DataGridCheckBoxColumn { Header = "L", Binding = new Binding("IsLocked") });
+            // Palette column (read-only) using converter
+            var paletteCol = new DataGridTemplateColumn { Header = "Palette", IsReadOnly = true }; var palFactory = new FrameworkElementFactory(typeof(TextBlock)); palFactory.SetBinding(TextBlock.TextProperty, new Binding("PaletteSetId") { Mode = BindingMode.OneWay, Converter = new UIntToHexConverter() }); paletteCol.CellTemplate = new DataTemplate { VisualTree = palFactory }; _gridEntries.Columns.Add(paletteCol);
+            _gridEntries.Columns.Add(new DataGridTextColumn { Header = "Ranges", Binding = new Binding("RangesText") }); leftStack.Children.Add(_gridEntries);
             var rowBtns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0,4,0,4) }; _btnAddRow = new Button { Content = "+", Width = 30, Margin = new Thickness(0,0,4,0)}; _btnAddRow.Click += (_, __)=> AddRowFromSelection(); _btnRemoveRow = new Button { Content = "-", Width = 30 }; _btnRemoveRow.Click += (_, __)=> RemoveSelectedRow(); rowBtns.Children.Add(_btnAddRow); rowBtns.Children.Add(_btnRemoveRow); leftStack.Children.Add(rowBtns);
             // Right details
             var rightStack = new StackPanel { Margin = new Thickness(6,0,0,0) }; Grid.SetColumn(rightStack,1); mainGrid.Children.Add(rightStack);
             rightStack.Children.Add(new TextBlock { Text = "Preview", FontWeight = FontWeights.Bold }); imgBigPreview = new System.Windows.Controls.Image { Height = 48, Stretch = Stretch.Fill }; rightStack.Children.Add(new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Margin = new Thickness(0,2,0,6), Child = imgBigPreview });
             rightStack.Children.Add(new TextBlock { Text = "Range Editor", FontWeight = FontWeights.Bold }); _btnRangeUndo = new Button { Content = "Undo", Width = 50, Margin = new Thickness(0,0,4,0) }; _btnRangeRedo = new Button { Content = "Redo", Width = 50 }; var undoPanel = new StackPanel { Orientation = Orientation.Horizontal }; undoPanel.Children.Add(_btnRangeUndo); undoPanel.Children.Add(_btnRangeRedo); rightStack.Children.Add(undoPanel); _btnRangeUndo.Click += (_, __)=> { _rangeEditor?.Undo(); UpdateRangeUndoRedoButtons(); }; _btnRangeRedo.Click += (_, __)=> { _rangeEditor?.Redo(); UpdateRangeUndoRedoButtons(); };
             _rangeEditor = new RangeEditorControl { Height = 44, Margin = new Thickness(0,2,0,4) }; _rangeEditor.RangesChanged += (_, list)=> ApplyRangeEditorToSelectedRow(list); _rangeEditor.HistoryChanged += (_, __)=> UpdateRangeUndoRedoButtons(); rightStack.Children.Add(new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Child = _rangeEditor });
-            rightStack.Children.Add(new TextBlock { Text = "All Ranges", FontWeight = FontWeights.Bold, Margin = new Thickness(0,6,0,0)}); _lstRanges = new ListView { Height = 120 }; var gv = new GridView(); gv.Columns.Add(new GridViewColumn { Header = "Palette", DisplayMemberBinding = new System.Windows.Data.Binding("PaletteHex") }); gv.Columns.Add(new GridViewColumn { Header = "Off:Len", DisplayMemberBinding = new System.Windows.Data.Binding("OffsetLength") }); _lstRanges.View = gv; rightStack.Children.Add(_lstRanges);
+            rightStack.Children.Add(new TextBlock { Text = "All Ranges", FontWeight = FontWeights.Bold, Margin = new Thickness(0,6,0,0)}); _lstRanges = new ListView { Height = 120 }; var gv = new GridView();
+            // Palette column for ranges using template + converter
+            var gvPaletteCol = new GridViewColumn { Header = "Palette" }; var gvPalTemplate = new DataTemplate(); var gvPalFactory = new FrameworkElementFactory(typeof(TextBlock)); gvPalFactory.SetBinding(TextBlock.TextProperty, new Binding("PaletteId") { Converter = new UIntToHexConverter() }); gvPalTemplate.VisualTree = gvPalFactory; gvPaletteCol.CellTemplate = gvPalTemplate; gv.Columns.Add(gvPaletteCol);
+            gv.Columns.Add(new GridViewColumn { Header = "Off:Len", DisplayMemberBinding = new Binding("OffsetLength") }); _lstRanges.View = gv; rightStack.Children.Add(_lstRanges);
             rightStack.Children.Add(new TextBlock { Text = "Generated", FontWeight = FontWeights.Bold, Margin = new Thickness(0,6,0,0)}); txtMulti = new TextBox { AcceptsReturn = true, Height = 80, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, IsReadOnly = true }; rightStack.Children.Add(txtMulti);
             rightStack.Children.Add(new TextBlock { Text = "Highlight", FontWeight = FontWeights.Bold, Margin = new Thickness(0,6,0,0)}); imgRangePreview = new System.Windows.Controls.Image { Height = 48, Stretch = Stretch.Fill }; rightStack.Children.Add(new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Child = imgRangePreview });
             return tab; }

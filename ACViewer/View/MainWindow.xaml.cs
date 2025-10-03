@@ -181,16 +181,23 @@ namespace ACViewer.View
         #endregion
 
         #region JSON Refresh / Apply
-        private void RefreshJson_Click(object sender, RoutedEventArgs e)
+        private async void RefreshJson_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 var clothing = ClothingTableList.CurrentClothingItem;
                 if (clothing == null) { AddStatusText("No clothing selected for JSON export"); return; }
-                var temp = Path.GetTempFileName();
-                CustomTextureStore.ExportClothingTable(clothing, temp);
-                JsonEditorText.Text = File.ReadAllText(temp);
-                File.Delete(temp);
+                var temp = System.IO.Path.GetTempFileName();
+
+                string jsonText = null;
+                await Task.Run(() =>
+                {
+                    CustomTextureStore.ExportClothingTable(clothing, temp);
+                    jsonText = System.IO.File.ReadAllText(temp);
+                });
+
+                JsonEditorText.Text = jsonText;
+                System.IO.File.Delete(temp);
                 _lastJsonSnapshot = JsonEditorText.Text;
                 UpdateJsonMetrics();
                 UpdateDiffStat();
@@ -199,17 +206,32 @@ namespace ACViewer.View
             catch (Exception ex) { AddStatusText("Refresh failed: " + ex.Message); }
         }
 
-        private void ApplyJson_Click(object sender, RoutedEventArgs e) => ApplyJsonInternal();
-        private void ApplyJsonInternal()
+        private async void ApplyJson_Click(object sender, RoutedEventArgs e) => await ApplyJsonInternalAsync();
+
+        private async Task ApplyJsonInternalAsync()
         {
             try
             {
                 var raw = JsonEditorText.Text;
-                using (var reader = new JsonTextReader(new StringReader(raw))) { while (reader.Read()) { } } // syntax validation
-                var temp = Path.GetTempFileName(); File.WriteAllText(temp, raw);
-                var imported = CustomTextureStore.ImportClothingTable(temp); File.Delete(temp);
+
+                // Validate syntax on background thread
+                await Task.Run(() =>
+                {
+                    using (var reader = new JsonTextReader(new System.IO.StringReader(raw))) { while (reader.Read()) { } }
+                });
+
+                var temp = System.IO.Path.GetTempFileName();
+                await Task.Run(() => System.IO.File.WriteAllText(temp, raw));
+
+                ACE.DatLoader.FileTypes.ClothingTable imported = null;
+                await Task.Run(() => { imported = CustomTextureStore.ImportClothingTable(temp); });
+                System.IO.File.Delete(temp);
+
                 if (imported == null) { AddStatusText("Apply failed: parsed null"); return; }
-                ClothingTableList.Instance?.OnClickClothingBase(imported, imported.Id, null, null);
+
+                // Marshal update to UI thread
+                Dispatcher.Invoke(() => ClothingTableList.Instance?.OnClickClothingBase(imported, imported.Id, null, null));
+
                 _lastJsonSnapshot = raw;
                 UpdateJsonMetrics();
                 UpdateDiffStat();
@@ -335,7 +357,11 @@ namespace ACViewer.View
             UpdateJsonMetrics();
             if (LiveValidateJson?.IsChecked == true) ValidateJson();
             UpdateDiffStat();
-            if (_autoApply && AutoApplyJson?.IsChecked == true) ApplyJsonInternal();
+            if (_autoApply && AutoApplyJson?.IsChecked == true)
+            {
+                // fire-and-forget async apply to avoid blocking UI on heavy import
+                _ = ApplyJsonInternalAsync();
+            }
         }
 
         private void UpdateJsonMetrics()

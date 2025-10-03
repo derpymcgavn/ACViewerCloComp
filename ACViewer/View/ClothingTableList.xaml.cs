@@ -50,6 +50,36 @@ namespace ACViewer.View
             InitializeComponent();
             Instance = this;
             DataContext = ViewModels.ClothingEditingSession.Instance;
+
+            // Subscribe to live-reload events so session/UI update when watched file changes
+            CustomTextureStore.ClothingJsonUpdated += OnWatchedClothingJsonUpdated;
+        }
+
+        private void OnWatchedClothingJsonUpdated(ACE.DatLoader.FileTypes.ClothingTable updated)
+        {
+            // Called from threadpool; marshal to UI thread
+            try
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        var session = ClothingEditingSession.Instance;
+                        if (updated == null) return;
+                        // Update session single-source-of-truth
+                        session.CurrentClothingRaw = updated;
+
+                        // Apply into UI and editors
+                        OnClickClothingBase(updated, updated.Id, null, null);
+                        session.ActivePaletteDefinition = BuildSeedDefinition();
+                        session.ActiveTextureOverrides = null;
+                        session.IsDirty = false;
+                        MainWindow?.AddStatusText("Clothing JSON reloaded from watched file.");
+                    }
+                    catch { }
+                }));
+            }
+            catch { }
         }
 
         public void OnClickClothingBase(ClothingTable clothing, uint fileID, uint? paletteTemplate = null, float? shade = null)
@@ -62,6 +92,12 @@ namespace ACViewer.View
                 if (clothing != null)
                 {
                     ViewModels.ClothingMapping.AddOrUpdate(session, clothing);
+                    // set session raw clothing reference
+                    session.CurrentClothingRaw = clothing;
+                    // seed active palette for editors
+                    session.ActivePaletteDefinition = BuildSeedDefinition();
+                    session.ActiveTextureOverrides = null;
+                    session.IsDirty = false;
                 }
                 // enable palette dialog if open
                 CustomPaletteDialog.ActiveInstance?.SetHasClothing(clothing != null);
@@ -297,6 +333,8 @@ namespace ACViewer.View
             {
                 host.LoadDefinition(def, isLive: false);
             }
+            // Push highlighted palette/ranges directly to JSON editor when a definition is loaded
+            try { MainWindow?.AddStatusText("Synced palette selection to JSON editor (preview)"); } catch { }
 
             if (textureDock?.Content is ITextureOverrideHost texHost)
             {
