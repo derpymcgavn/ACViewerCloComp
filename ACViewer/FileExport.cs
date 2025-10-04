@@ -688,20 +688,11 @@ namespace ACViewer
                 material.Name = $"{surfaceID:X8}";
                 material.TextureDiffuse = new Assimp.TextureSlot()
                 {
-                    //FilePath = surfaceFilename,
                     FilePath = $"{surfaceID:X8}.png",
-                    TextureType = TextureType.Diffuse,
-                    //WrapModeU = TextureWrapMode.Wrap,
-                    //WrapModeV = TextureWrapMode.Wrap,
+                    TextureType = Assimp.TextureType.Diffuse,
                 };
 
-                // if this is 0, assimp defaults to lambert shading
-                // even forcing phong shading seems to be ignored. this must be set...
                 material.Shininess = 0.00001f;
-
-                // there seems to be no other way to set some important material props via assimp currently :(
-                // going to use this as a base, and then fill in the rest via raw fbx reading/writing via UkooLabs.FbxSharpie
-
                 scene.Materials.Add(material);
             }
         }
