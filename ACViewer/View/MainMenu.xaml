@@ -51,6 +51,7 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Palette _Editor" Click="Menu_OpenPaletteEditor" />
+                <MenuItem Header="Texture _Gallery" Click="Menu_OpenTextureGallery" />
                 <Separator />
                 <MenuItem Header="Import Clothing JSON..." Click="ImportClothingJson_Click" />
                 <MenuItem Header="Export Clothing JSON..." Click="ExportClothingJson_Click" />
@@ -59,7 +60,7 @@
                 <MenuItem Header="Load _Instances" Click="LoadInstances_Click" x:Name="optionLoadInstances"/>
                 <MenuItem Header="Load _Encounters" Click="LoadEncounters_Click" x:Name="optionLoadEncounters"/>
             </MenuItem>
-            <MenuItem Header="_View">
+            <MenuItem Header="_View" SubmenuOpened="ViewMenu_SubmenuOpened">
                 <MenuItem Header="_World Map" Click="WorldMap_Click" />
                 <MenuItem x:Name="optionUseMipMaps" Header="Use _Mipmaps" Click="UseMipMaps_Click" />
                 <MenuItem Header="Show _Location" Click="ShowLocation_Click" />

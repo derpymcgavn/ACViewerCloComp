@@ -171,20 +171,31 @@ namespace ACViewer.Render
 
             if (LineVerts != null && LineVerts.Count > 0)
             {
-                GraphicsDevice.SetVertexBuffer(Lines_VB);
-
-                foreach (var pass in Effect.CurrentTechnique.Passes)
+                int linePrimitiveCount = LineVerts.Count / 2; // LineList needs 2 verts per line
+                if (linePrimitiveCount > 0)
                 {
-                    pass.Apply();
-                    GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, LineVerts.Count / 2);
+                    GraphicsDevice.SetVertexBuffer(Lines_VB);
+
+                    foreach (var pass in Effect.CurrentTechnique.Passes)
+                    {
+                        pass.Apply();
+                        GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, linePrimitiveCount);
+                    }
                 }
 
-                GraphicsDevice.SetVertexBuffer(Arrows_VB);
-
-                foreach (var pass in Effect.CurrentTechnique.Passes)
+                // Only draw arrowheads if we have at least one full triangle (3 verts)
+                if (ArrowVerts != null && ArrowVerts.Count >= 3)
                 {
-                    pass.Apply();
-                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, ArrowVerts.Count / 3);
+                    var arrowPrimitiveCount = ArrowVerts.Count / 3; // integer division
+                    if (arrowPrimitiveCount > 0)
+                    {
+                        GraphicsDevice.SetVertexBuffer(Arrows_VB);
+                        foreach (var pass in Effect.CurrentTechnique.Passes)
+                        {
+                            pass.Apply();
+                            GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, arrowPrimitiveCount);
+                        }
+                    }
                 }
             }
 

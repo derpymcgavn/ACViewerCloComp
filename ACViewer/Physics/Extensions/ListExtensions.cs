@@ -12,7 +12,8 @@ namespace ACE.Server.Physics.Extensions
             while (n > 1)
             {
                 n--;
-                int k = Random.RollDice(0, n);
+                // Fisher-Yates: pick k in [0,n] inclusive. Use exclusive helper for clarity.
+                int k = Random.RollDiceExclusive(0, n + 1);
                 T value = list[k];
                 list[k] = list[n];
                 list[n] = value;

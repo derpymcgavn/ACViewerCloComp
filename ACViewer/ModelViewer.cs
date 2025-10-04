@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -207,7 +208,8 @@ namespace ACViewer
             // assumed to be in Setup mode for ClothingBase
             GfxObjMode = false;
 
-            var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase.Id, paletteTemplate, shade); // disambiguated
+            // CHANGED: build ObjDesc from in-memory clothing table so runtime texture overrides are honored
+            var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase, paletteTemplate, shade);
 
             Setup = new SetupInstance(setupID, objDesc);
 
@@ -218,24 +220,22 @@ namespace ACViewer
             }
             EnsureGroundResources();
             ModelType = ModelType.Setup;
-
-            MainWindow.Status.WriteLine($"Loading {setupID:X8} with ClothingBase {clothingBase.Id:X8}, PaletteTemplate {paletteTemplate}, and Shade {shade}");
         }
 
         // added custom palette loader
         public void LoadModelCustom(uint setupID, ClothingTable clothingBase, List<CloSubPalette> customSubPalettes, float shade)
         {
             TextureCache.Init();
-
             GfxObjMode = false;
 
-            var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase.Id, PaletteTemplate.Undef, 0.0f);
+            // Use the ClothingTable instance directly so runtime texture overrides are honored
+            var objDesc = new ACViewer.Model.ObjDesc(setupID, clothingBase, PaletteTemplate.Undef, shade);
+
             if (customSubPalettes != null && customSubPalettes.Count > 0)
             {
                 objDesc.PaletteChanges = new PaletteChanges(customSubPalettes, shade);
             }
             Setup = new SetupInstance(setupID, objDesc);
-
             if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
             {
                 InitObject(setupID);
@@ -243,8 +243,6 @@ namespace ACViewer
             }
             EnsureGroundResources();
             ModelType = ModelType.Setup;
-
-            MainWindow.Status.WriteLine($"Loading {setupID:X8} with CUSTOM palettes count={customSubPalettes?.Count} Shade {shade}");
         }
 
         public void LoadEnvironment(uint envID)
@@ -373,13 +371,13 @@ namespace ACViewer
 
             EnsureGroundResources();
 
-            // Draw reflection first (so real model overwrites where depths match)
+            // Reflection pass
             DrawReflection();
 
-            // Draw ground plane beneath
+            // Ground plane
             DrawGroundPlane();
 
-            // Draw actual model
+            // Main model
             Setup.Draw(PolyIdx, PartIdx);
 
             if (ViewObject.PhysicsObj.ParticleManager != null)

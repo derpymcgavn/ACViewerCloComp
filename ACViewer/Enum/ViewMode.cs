@@ -4,6 +4,7 @@
     {
         Undef,
         Texture,
+        TextureGallery,
         Model,
         World,
         Map,

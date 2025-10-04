@@ -21,8 +21,19 @@ namespace ACViewer.Converters
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            // One-way usage only
-            return Binding.DoNothing;
+            // Support editing: accept forms like 0x1234ABCD, 1234ABCD, decimal (discouraged but allowed)
+            if (value is string s)
+            {
+                s = s.Trim();
+                if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s[2..];
+                // Try hex first
+                if (uint.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex))
+                    return hex;
+                // Fallback decimal
+                if (uint.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dec))
+                    return dec;
+            }
+            return Binding.DoNothing; // do not update source on invalid input
         }
     }
 }

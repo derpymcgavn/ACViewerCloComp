@@ -169,12 +169,22 @@ namespace ACViewer.Primitives
 
             graphicsDevice.Indices = indexBuffer;
 
+            // Safety: ensure triangle list has a multiple of 3 indices.
+            if (indices.Count < 3 || (indices.Count % 3) != 0)
+            {
+                // Nothing (or incomplete triangle) to draw; silently skip.
+                return;
+            }
 
             foreach (EffectPass effectPass in effect.CurrentTechnique.Passes)
             {
                 effectPass.Apply();
 
                 int primitiveCount = indices.Count / 3;
+
+                // Guard against zero primitive count to avoid runtime exception
+                if (primitiveCount <= 0)
+                    continue;
 
                 graphicsDevice.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, primitiveCount);
             }

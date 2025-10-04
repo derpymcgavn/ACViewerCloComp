@@ -37,6 +37,7 @@ namespace ACViewer
         public static TextureViewer TextureViewer { get; set; }
         public static ParticleViewer ParticleViewer { get; set; }
         public static WorldObjectViewer WorldObjectViewer { get; set; }
+        public static TextureGalleryViewer TextureGalleryViewer { get; set; }
 
         private static ViewMode _viewMode { get; set; }
 
@@ -73,6 +74,13 @@ namespace ACViewer
 
         // text rendering
         public SpriteFont Font { get; set; }
+
+        // Background render location (user request)
+        private static readonly uint BackgroundObjCellId = 0xE927000B; // full cell id
+        private static readonly uint BackgroundLandblockDid = 0xE927FFFF; // landblock file DID
+        private static readonly Vector3 BackgroundPos = new Vector3(30.425781f, 58.958984f, 45.30615f);
+        private static readonly Quaternion BackgroundOrient = new Quaternion(0f, 0f, -0.6084369f, 0.7936023f); // x,y,z,w
+        private static bool BackgroundLoaded;
 
         protected override void Initialize()
         {
@@ -119,6 +127,32 @@ namespace ACViewer
             TextureViewer = new TextureViewer();
             ParticleViewer = new ParticleViewer();
             WorldObjectViewer = new WorldObjectViewer();
+            TextureGalleryViewer = new TextureGalleryViewer();
+
+            TryLoadBackgroundLocation();
+        }
+
+        private void TryLoadBackgroundLocation()
+        {
+            if (BackgroundLoaded) return;
+            // ensure dats loaded
+            if (ACE.DatLoader.DatManager.PortalDat == null || ACE.DatLoader.DatManager.CellDat == null) return;
+            try
+            {
+                // Load landblock and set camera
+                ViewMode = ViewMode.World;
+                WorldViewer.LoadLandblock(BackgroundLandblockDid, 0); // radius 0 for just this block
+                // Override camera position/orientation
+                Camera.Position = BackgroundPos;
+                Camera.Dir = Vector3.Normalize(Vector3.Transform(Vector3.UnitY, BackgroundOrient));
+                Camera.Up = Vector3.UnitZ;
+                Camera.CreateLookAt();
+                BackgroundLoaded = true;
+            }
+            catch
+            {
+                // ignore failures
+            }
         }
 
         public void InitPlayer()
@@ -171,6 +205,9 @@ namespace ACViewer
                 case ViewMode.WorldObject:
                     WorldObjectViewer.Update(time);
                     break;
+                case ViewMode.TextureGallery:
+                    TextureGalleryViewer.Update(time);
+                    break;
             }
 
             PrevKeyboardState = keyboardState;
@@ -200,6 +237,9 @@ namespace ACViewer
                     break;
                 case ViewMode.WorldObject:
                     WorldObjectViewer.Draw(time);
+                    break;
+                case ViewMode.TextureGallery:
+                    TextureGalleryViewer.Draw(time);
                     break;
             }
 

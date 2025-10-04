@@ -88,8 +88,7 @@ namespace ACViewer
             foreach (var createParticleHook in createParticleHooks)
             {
                 //var emitterInfo = DatManager.PortalDat.ReadFromDat<ACE.DatLoader.FileTypes.ParticleEmitterInfo>(createParticleHook.EmitterInfoId);
-                MainWindow.Status.WriteLine($"ParticleEmitterInfo.ID: {createParticleHook.EmitterInfoId:X8}");
-
+                View.MainWindow.StatusSink?.Post($"ParticleEmitterInfo.ID: {createParticleHook.EmitterInfoId:X8}");
                 Player.PhysicsObj.create_particle_emitter(createParticleHook.EmitterInfoId, (int)createParticleHook.PartIndex, new AFrame(createParticleHook.Offset), (int)createParticleHook.EmitterId);
             }
         }

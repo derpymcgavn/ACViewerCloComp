@@ -12,6 +12,7 @@ using AvalonDock.Layout.Serialization;
 using ACViewer.Config;
 using ACViewer.CustomTextures;
 using ACE.DatLoader.FileTypes;
+using System.Windows.Threading; // added
 
 namespace ACViewer.View
 {
@@ -21,6 +22,9 @@ namespace ACViewer.View
     public partial class MainWindow : Window
     {
         public static MainWindow Instance { get; private set; }
+        internal static ACViewer.Services.IStatusSink StatusSink { get; set; } // new sink reference
+        internal static ACViewer.Services.IAssetRepository AssetRepository { get; set; } // global asset repo
+        internal static ACViewer.Services.DatInitializationService DatInitService { get; private set; }
         private static Config.Config Config => ConfigManager.Config;
         private const string DockLayoutFile = "DockLayout.config";
 
@@ -43,6 +47,13 @@ namespace ACViewer.View
             InitializeComponent();
             Instance = this;
             DataContext = this;
+            if (StatusSink == null)
+            {
+                StatusSink = new ACViewer.Services.UiStatusSink(Dispatcher);
+            }
+            AssetRepository ??= new ACViewer.Services.DatAssetRepository();
+            DatInitService ??= new ACViewer.Services.DatInitializationService();
+            DatInitService.Progress += p => StatusSink?.Post($"DAT: {p.Stage} {p.Percent:0}% - {p.Message}");
             // Defer heavy init so docked controls (MainMenu, etc.) are created
             Loaded += (_, __) => SafeInit();
         }
@@ -147,28 +158,49 @@ namespace ACViewer.View
         }
         #endregion
 
-        #region Status output
-        public async void AddStatusText(string line)
+        #region Status output (thread-safe)
+        private void FlushStatus()
         {
-            if (SuppressStatusText) return;
-            _statusLines.Add(line);
-            if (_statusLines.Count > MaxStatusLines)
-                _statusLines.RemoveRange(0, _statusLines.Count - MaxStatusLines);
-
-            var elapsed = DateTime.Now - _lastStatusFlush;
-            if (elapsed < StatusMinInterval)
-            {
-                if (_pendingStatusFlush) return;
-                _pendingStatusFlush = true;
-                await Task.Delay(StatusMinInterval);
-                _pendingStatusFlush = false;
-            }
             if (Status != null)
             {
                 Status.Text = string.Join('\n', _statusLines);
                 Status.ScrollToEnd();
             }
             _lastStatusFlush = DateTime.Now;
+        }
+
+        public async void AddStatusText(string line)
+        {
+            // kept internal usage pattern for sink
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(new Action(() => AddStatusText(line)), DispatcherPriority.Background);
+                    return;
+                }
+                if (SuppressStatusText) return;
+                _statusLines.Add(line);
+                if (_statusLines.Count > MaxStatusLines)
+                    _statusLines.RemoveRange(0, _statusLines.Count - MaxStatusLines);
+                var elapsed = DateTime.Now - _lastStatusFlush;
+                if (elapsed < StatusMinInterval)
+                {
+                    if (_pendingStatusFlush) return;
+                    _pendingStatusFlush = true;
+                    await Task.Delay(StatusMinInterval);
+                    _pendingStatusFlush = false;
+                    if (!Dispatcher.CheckAccess())
+                        Dispatcher.BeginInvoke(new Action(FlushStatus), DispatcherPriority.Background);
+                    else
+                        FlushStatus();
+                }
+                else
+                {
+                    FlushStatus();
+                }
+            }
+            catch { }
         }
         #endregion
 
@@ -183,27 +215,29 @@ namespace ACViewer.View
         #region JSON Refresh / Apply
         private async void RefreshJson_Click(object sender, RoutedEventArgs e)
         {
+            await RefreshJsonFromModelAsync();
+        }
+
+        internal async Task RefreshJsonFromModelAsync(bool silent=false)
+        {
             try
             {
                 var clothing = ClothingTableList.CurrentClothingItem;
-                if (clothing == null) { AddStatusText("No clothing selected for JSON export"); return; }
+                if (clothing == null) { if(!silent) AddStatusText("No clothing selected for JSON export"); return; }
                 var temp = System.IO.Path.GetTempFileName();
-
                 string jsonText = null;
-                await Task.Run(() =>
-                {
+                await Task.Run(() => {
                     CustomTextureStore.ExportClothingTable(clothing, temp);
                     jsonText = System.IO.File.ReadAllText(temp);
                 });
-
                 JsonEditorText.Text = jsonText;
                 System.IO.File.Delete(temp);
                 _lastJsonSnapshot = JsonEditorText.Text;
                 UpdateJsonMetrics();
                 UpdateDiffStat();
-                AddStatusText("JSON refreshed from current clothing table");
+                if(!silent) AddStatusText("JSON refreshed from current clothing table");
             }
-            catch (Exception ex) { AddStatusText("Refresh failed: " + ex.Message); }
+            catch (Exception ex) { if(!silent) AddStatusText("Refresh failed: " + ex.Message); }
         }
 
         private async void ApplyJson_Click(object sender, RoutedEventArgs e) => await ApplyJsonInternalAsync();
@@ -396,5 +430,23 @@ namespace ACViewer.View
             JsonEditorText.TextWrapping = WrapJson.IsChecked == true ? TextWrapping.Wrap : TextWrapping.NoWrap;
         }
         #endregion
+
+        // Real-time sync debounce
+        private DateTime _lastRealtimeSync = DateTime.MinValue;
+        private static readonly TimeSpan RealtimeSyncMinInterval = TimeSpan.FromMilliseconds(300);
+        private bool _pendingRealtimeSync;
+        internal async void RealtimeJsonSync()
+        {
+            var since = DateTime.UtcNow - _lastRealtimeSync;
+            if (since < RealtimeSyncMinInterval)
+            {
+                if (_pendingRealtimeSync) return;
+                _pendingRealtimeSync = true;
+                await Task.Delay(RealtimeSyncMinInterval);
+                _pendingRealtimeSync = false;
+            }
+            await RefreshJsonFromModelAsync(silent:true);
+            _lastRealtimeSync = DateTime.UtcNow;
+        }
     }
 }

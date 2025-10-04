@@ -105,16 +105,32 @@ namespace ACE.Server.Physics.Animation
 
         public void InitSphere(int numSphere, List<Sphere> spheres, float scale)
         {
-            if (numSphere <= 2)
-                NumSphere = numSphere;
-            else
-                NumSphere = 2;
+            // Guard against null / empty input
+            if (spheres == null || spheres.Count == 0 || numSphere <= 0)
+            {
+                NumSphere = 0;
+                return;
+            }
+
+            // Clamp to engine supported max (2) AND available source spheres
+            NumSphere = Math.Min(2, Math.Min(numSphere, spheres.Count));
+
+            // Ensure LocalSphere collection is large enough but not re-growing endlessly across calls
+            if (LocalSphere.Count > 0)
+                LocalSphere.Clear();
 
             for (var i = 0; i < NumSphere; i++)
-                LocalSphere.Add(new Sphere(spheres[i].Center * scale, spheres[i].Radius * scale));
+            {
+                // extra defensive bounds check (should not trigger due to clamp above)
+                if (i >= spheres.Count) break;
+                var src = spheres[i];
+                LocalSphere.Add(new Sphere(src.Center * scale, src.Radius * scale));
+            }
 
-            // are these inited elsewhere,
-            // or should they be created here?
+            if (NumSphere == 0)
+                return;
+
+            // Initialize low point only if we actually populated at least one sphere
             LocalLowPoint = LocalSphere[0].Center;
             LocalLowPoint.Z -= LocalSphere[0].Radius;
         }
@@ -203,7 +219,8 @@ namespace ACE.Server.Physics.Animation
             }
             LocalSpacePos = new Position(pos);
             LocalSpaceZ = pos.GlobalToLocalVec(Vector3.UnitZ);
-            LocalSpaceLowPoint = LocalSpaceSphere[0].Center - (LocalSpaceZ * LocalSpaceSphere[0].Radius);
+            if (NumSphere > 0)
+                LocalSpaceLowPoint = LocalSpaceSphere[0].Center - (LocalSpaceZ * LocalSpaceSphere[0].Radius);
         }
 
         public bool CheckWalkables()

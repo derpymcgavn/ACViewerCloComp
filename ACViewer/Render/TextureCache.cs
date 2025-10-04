@@ -422,7 +422,19 @@ namespace ACViewer.Render
                 return swatch;
             }
 
+            // Guard: sometimes OrigTextureId may point directly to a 0x06 texture instead of a 0x05 SurfaceTexture
+            if (surfaceTextureID >> 24 == 0x06)
+            {
+                return GetTexture(surfaceTextureID, surface, paletteChanges);
+            }
+
             var surfaceTexture = DatManager.PortalDat.ReadFromDat<SurfaceTexture>(surfaceTextureID);
+
+            if (surfaceTexture.Textures == null || surfaceTexture.Textures.Count == 0)
+            {
+                Console.WriteLine($"[TextureCache] SurfaceTexture {surfaceTextureID:X8} has no texture entries. Falling back to direct ID.");
+                return GetTexture(surfaceTextureID, surface, paletteChanges); // fallback attempt
+            }
 
             return GetTexture(surfaceTexture.Textures[0], surface, paletteChanges);
         }
@@ -439,6 +451,12 @@ namespace ACViewer.Render
             {
                 // gfxobj
                 var gfxObj = DatManager.PortalDat.ReadFromDat<ACE.DatLoader.FileTypes.GfxObj>(fileID);
+
+                if (gfxObj.Surfaces.Count == 0)
+                {
+                    Console.WriteLine($"[TextureCache] GfxObj {fileID:X8} has no surfaces");
+                    return null;
+                }
 
                 var surfaceID = gfxObj.Surfaces[0];
                 Surface surface = DatManager.PortalDat.ReadFromDat<Surface>(surfaceID);
@@ -460,7 +478,19 @@ namespace ACViewer.Render
                 if (textureChanges != null && textureChanges.TryGetValue(textureId, out var newTextureId))
                     textureId = newTextureId;
 
+                // If this is already a 0x06 texture, load directly
+                if (textureId >> 24 == 0x06)
+                {
+                    return GetTexture(textureId, surface);
+                }
+
                 var surfaceTexture = DatManager.PortalDat.ReadFromDat<SurfaceTexture>(textureId);
+
+                if (surfaceTexture.Textures == null || surfaceTexture.Textures.Count == 0)
+                {
+                    Console.WriteLine($"[TextureCache] SurfaceTexture {textureId:X8} empty when referenced from GfxObj {fileID:X8}. Using orig ID as texture.");
+                    return GetTexture(textureId, surface);
+                }
 
                 return GetTexture(surfaceTexture.Textures[0], surface);
             }
@@ -479,6 +509,12 @@ namespace ACViewer.Render
             {
                 // surface texture
                 var surfaceTexture = DatManager.PortalDat.ReadFromDat<SurfaceTexture>(fileID);
+
+                if (surfaceTexture.Textures == null || surfaceTexture.Textures.Count == 0)
+                {
+                    Console.WriteLine($"[TextureCache] SurfaceTexture {fileID:X8} empty. Returning null texture.");
+                    return null;
+                }
 
                 return GetTexture(surfaceTexture.Textures[0], null, paletteChanges, useCache);
             }
@@ -515,7 +551,18 @@ namespace ACViewer.Render
                 if (textureChanges != null && textureChanges.TryGetValue(textureId, out var newTextureId))
                     textureId = newTextureId;
 
+                if (textureId >> 24 == 0x06)
+                {
+                    return GetTexture(textureId, surface, paletteChanges, useCache);
+                }
+
                 var surfaceTexture = DatManager.PortalDat.ReadFromDat<SurfaceTexture>(textureId);
+
+                if (surfaceTexture.Textures == null || surfaceTexture.Textures.Count == 0)
+                {
+                    Console.WriteLine($"[TextureCache] SurfaceTexture {textureId:X8} empty when referenced from Surface {fileID:X8}. Using orig ID as texture.");
+                    return GetTexture(textureId, surface, paletteChanges, useCache);
+                }
 
                 return GetTexture(surfaceTexture.Textures[0], surface, paletteChanges, useCache);
             }

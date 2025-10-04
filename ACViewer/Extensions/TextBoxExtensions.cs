@@ -1,6 +1,6 @@
 ﻿using System.Windows.Controls;
-
 using ACViewer.View;
+using ACViewer.Services;
 
 namespace ACViewer
 {
@@ -8,7 +8,10 @@ namespace ACViewer
     {
         public static void WriteLine(this TextBox textBox, string line)
         {
-            MainWindow.Instance.AddStatusText(line);
+            if (MainWindow.StatusSink != null)
+                MainWindow.StatusSink.Post(line);
+            else
+                MainWindow.Instance?.AddStatusText(line);
         }
     }
 }

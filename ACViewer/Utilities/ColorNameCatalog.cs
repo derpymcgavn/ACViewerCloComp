@@ -28,7 +28,6 @@ namespace ACViewer.Utilities
         };
 
         private static List<(string Name,int Color,int R,int G,int B)> _cache;
-        private static List<(string Name,int Color,int[] Vector)> _spellCache;
 
         private static void EnsureCache()
         {

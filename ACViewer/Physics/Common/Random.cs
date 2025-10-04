@@ -41,27 +41,38 @@ namespace ACE.Server.Physics.Common
     public class Random
     {
         /// <summary>
-        /// Returns a random number between min and max
+        /// Returns a random number in [min, max) for floats (upper bound exclusive).
         /// </summary>
         public static float RollDice(float min, float max)
         {
-            // todo: implement exactly the way AC handles it
-            // inclusive/exclusive?
+            if (max <= min) return min;
             return (float)(LazyRandom.Instance.RNG.NextDouble() * (max - min) + min);
         }
 
         /// <summary>
-        /// Returns a random integer between min and max, inclusive
+        /// Returns a random integer between min and max, inclusive (legacy semantics).
+        /// CAUTION: Inclusive upper bound differs from System.Random.Next(min,maxExclusive).
+        /// Prefer RollDiceExclusive for standard exclusive semantics.
         /// </summary>
-        /// <param name="min">The minimum possible value to return</param>
-        /// <param name="max">The maximum possible value to return</param>
         public static int RollDice(int min, int max)
         {
+            if (max < min) return min;
             return LazyRandom.Instance.RNG.Next(min, max + 1);
+        }
+
+        /// <summary>
+        /// Standard exclusive-upper-bound helper: returns int in [min, maxExclusive).
+        /// Use to avoid off-by-one when indexing collections (size = maxExclusive - min).
+        /// </summary>
+        public static int RollDiceExclusive(int min, int maxExclusive)
+        {
+            if (maxExclusive <= min) return min;
+            return LazyRandom.Instance.RNG.Next(min, maxExclusive);
         }
 
         public static uint RollDice(uint min, uint max)
         {
+            if (max < min) return min;
             return (uint)LazyRandom.Instance.RNG.Next((int)min, (int)(max + 1));
         }
     }

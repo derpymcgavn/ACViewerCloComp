@@ -27,14 +27,27 @@ namespace ACViewer.Model
             Add(clothingTableID, paletteTemplate, shade);
         }
 
+        // NEW: build directly from an existing ClothingTable instance (so runtime overrides are respected)
+        public ObjDesc(uint setupID, ClothingTable clothingTable, PaletteTemplate paletteTemplate = PaletteTemplate.Undef, float shade = 0.0f)
+        {
+            SetupId = setupID;
+            if (clothingTable != null)
+                AddFromTable(clothingTable, paletteTemplate, shade);
+        }
+
         public void Add(uint clothingTableID, PaletteTemplate paletteTemplate = PaletteTemplate.Undef, float shade = 0.0f)
         {
             var clothingTable = DatManager.PortalDat.ReadFromDat<ClothingTable>(clothingTableID);
+            AddFromTable(clothingTable, paletteTemplate, shade);
+        }
 
+        private void AddFromTable(ClothingTable clothingTable, PaletteTemplate paletteTemplate, float shade)
+        {
+            if (clothingTable == null) return;
             if (!clothingTable.ClothingBaseEffects.TryGetValue(SetupId, out var baseEffect)) return;
 
             // palette changes
-            if (clothingTable.ClothingSubPalEffects.TryGetValue((uint)paletteTemplate, out var palEffect))
+            if (paletteTemplate != PaletteTemplate.Undef && clothingTable.ClothingSubPalEffects.TryGetValue((uint)paletteTemplate, out var palEffect))
             {
                 if (PaletteChanges == null)
                     PaletteChanges = new PaletteChanges(palEffect.CloSubPalettes, shade);
@@ -56,7 +69,7 @@ namespace ACViewer.Model
                 else
                     partChange.NewGfxObjId = objEffect.ModelId;
 
-                // texture changes
+                // texture changes (includes runtime overrides because we used in-memory table)
                 foreach (var texEffect in objEffect.CloTextureEffects)
                 {
                     if (partChange.TextureChanges == null)

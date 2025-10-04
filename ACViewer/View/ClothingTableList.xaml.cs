@@ -13,6 +13,7 @@ using ACViewer.CustomTextures;
 using AvalonDock.Layout;
 using ACViewer.Model; // for CloSubPalette definitions
 using ACViewer.ViewModels;
+using System.Reflection; // added for reflection on texture overrides
 
 namespace ACViewer.View
 {
@@ -66,20 +67,81 @@ namespace ACViewer.View
                     {
                         var session = ClothingEditingSession.Instance;
                         if (updated == null) return;
-                        // Update session single-source-of-truth
+
+                        // Preserve currently active texture overrides (if any) before replacing clothing table
+                        var activeTexOverrides = session.ActiveTextureOverrides; // retain reference
+
                         session.CurrentClothingRaw = updated;
 
-                        // Apply into UI and editors
                         OnClickClothingBase(updated, updated.Id, null, null);
                         session.ActivePaletteDefinition = BuildSeedDefinition();
-                        session.ActiveTextureOverrides = null;
                         session.IsDirty = false;
+
+                        // Re-apply previously active texture overrides (if definition still present)
+                        if (activeTexOverrides != null)
+                        {
+                            session.ActiveTextureOverrides = activeTexOverrides; // restore
+                            ApplyTextureOverridesToClothing(updated, activeTexOverrides);
+                            LoadModelWithClothingBase(); // refresh viewer
+                        }
+
                         MainWindow?.AddStatusText("Clothing JSON reloaded from watched file.");
                     }
                     catch { }
                 }));
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Applies a CustomTextureDefinition (part/old->new) to a clothing table in-place using reflection on CloTextureEffect.NewTexture.
+        /// </summary>
+        internal static void ApplyTextureOverridesToClothing(ClothingTable clothing, CustomTextureDefinition overridesDef)
+        {
+            if (clothing == null || overridesDef == null || overridesDef.Entries == null) return;
+
+            // Build lookup: (partIndex, oldId) -> newId
+            var map = overridesDef.Entries
+                .GroupBy(e => (e.PartIndex, e.OldId))
+                .ToDictionary(g => g.Key, g => g.Last().NewId); // last wins if duplicates
+
+            // Reflection property caches
+            var cloTexType = typeof(CloTextureEffect);
+            var newTexProp = cloTexType.GetProperty("NewTexture", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var oldTexProp = cloTexType.GetProperty("OldTexture", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            foreach (var kvp in clothing.ClothingBaseEffects)
+            {
+                foreach (var obj in kvp.Value.CloObjectEffects)
+                {
+                    var partIndex = (int)obj.Index;
+                    foreach (var tex in obj.CloTextureEffects)
+                    {
+                        try
+                        {
+                            // Reader old texture id (respecting backing field accessibility)
+                            uint oldId = tex.OldTexture;
+                            if (oldTexProp != null)
+                            {
+                                var val = oldTexProp.GetValue(tex);
+                                if (val is uint ov) oldId = ov;
+                            }
+                            if (map.TryGetValue((partIndex, oldId), out var newId))
+                            {
+                                if (tex.NewTexture != newId)
+                                {
+                                    if (newTexProp != null)
+                                        newTexProp.SetValue(tex, newId);
+                                    else
+                                        // fallback if property not found (should not happen in current model)
+                                        tex.GetType().GetField("NewTexture", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?.SetValue(tex, newId);
+                                }
+                            }
+                        }
+                        catch { /* ignore problematic entry */ }
+                    }
+                }
+            }
         }
 
         public void OnClickClothingBase(ClothingTable clothing, uint fileID, uint? paletteTemplate = null, float? shade = null)
@@ -433,13 +495,6 @@ namespace ACViewer.View
                 return;
             }
 
-            var dlg = new CustomPaletteDialog
-            {
-                StartingDefinition = BuildSeedDefinition(),
-                AvailablePaletteIDs = BuildAvailablePaletteIdList(),
-                OnLiveUpdate = LiveUpdateCustom
-            };
-
             try
             {
                 var layout = mw.DockManager.Layout;
@@ -453,14 +508,8 @@ namespace ACViewer.View
                 {
                     existing.IsActive = true;
                     existing.IsVisible = true;
-                    if (currentDef != null && existing.Content is ICustomPaletteHost host)
-                        host.LoadDefinition(currentDef, isLive: false);
-
-                    // Refresh texture dock if exists
-                    var texDock2 = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorable>()
-                        .FirstOrDefault(a => a.ContentId == "TextureOverridesDock");
-                    if (currentDef != null && texDock2?.Content is ITextureOverrideHost texHost2)
-                        texHost2.UpdateFromPalette(currentDef);
+                    if (currentDef != null && existing.Content is ICustomPaletteHost host1)
+                        host1.LoadDefinition(currentDef, isLive: false);
                     return;
                 }
 
@@ -474,46 +523,31 @@ namespace ACViewer.View
                     return; // No popup fallback
                 }
 
-                dlg.InitializeForDock();
-                var parts = dlg.GetDockParts();
-                if (parts.palette is UIElement palContent)
+                // Create a fresh dialog instance each open to avoid re-parenting issues
+                var dlg = new CustomPaletteDialog();
+
+                var anchor = new AvalonDock.Layout.LayoutAnchorable
                 {
-                    var anchor = new AvalonDock.Layout.LayoutAnchorable
-                    {
-                        Title = "Custom Palette",
-                        ContentId = "CustomPaletteDock",
-                        Content = palContent,
-                        CanClose = true,
-                        CanHide = true
-                    };
-                    targetPane.Children.Add(anchor);
-                    anchor.IsActive = true;
-                    if (currentDef != null && palContent is ICustomPaletteHost host)
-                        host.LoadDefinition(currentDef, isLive: false);
-                    else if (currentDef == null && CurrentClothingItem != null)
-                    {
-                        // Defer definition if not yet available
-                        Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            var defLater = _customActive ? BuildSeedDefinitionFromCustom() : BuildSeedDefinition();
-                            if (defLater != null && anchor.Content is ICustomPaletteHost hostLater)
-                                hostLater.LoadDefinition(defLater, isLive: false);
-                        }));
-                    }
-                }
-                if (parts.textures is UIElement texContent)
+                    Title = "Custom Palette",
+                    ContentId = "CustomPaletteDock",
+                    Content = dlg,
+                    CanClose = true,
+                    CanHide = true
+                };
+                targetPane.Children.Add(anchor);
+                anchor.IsActive = true;
+
+                if (currentDef != null && dlg is ICustomPaletteHost host)
+                    host.LoadDefinition(currentDef, isLive: false);
+                else if (currentDef == null && CurrentClothingItem != null)
                 {
-                    var texAnchor = new AvalonDock.Layout.LayoutAnchorable
+                    // Defer definition if not yet available
+                    Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        Title = "Texture Overrides",
-                        ContentId = "TextureOverridesDock",
-                        Content = texContent,
-                        CanClose = true,
-                        CanHide = true
-                    };
-                    targetPane.Children.Add(texAnchor);
-                    if (currentDef != null && texContent is ITextureOverrideHost texHost)
-                        texHost.UpdateFromPalette(currentDef);
+                        var defLater = _customActive ? BuildSeedDefinitionFromCustom() : BuildSeedDefinition();
+                        if (defLater != null && anchor.Content is ICustomPaletteHost hostLater)
+                            hostLater.LoadDefinition(defLater, isLive: false);
+                    }));
                 }
             }
             catch (Exception ex)
@@ -552,6 +586,7 @@ namespace ACViewer.View
             _customActive = true;
             var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
             ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
+            MainWindow.Instance?.RealtimeJsonSync();
         }
 
         public void ApplyPalettePreviewDefinition(CustomPaletteDefinition def)
@@ -568,6 +603,7 @@ namespace ACViewer.View
             }
             var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
             ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, list, def.Shade);
+            MainWindow.Instance?.RealtimeJsonSync();
         }
 
         public void ForceOpenPaletteEditorAfterImport()
@@ -659,6 +695,36 @@ namespace ACViewer.View
                     session.SelectedCloSubPalette = null;
                     break;
             }
+        }
+
+        internal void ApplyLivePaletteDefinition(CustomPaletteDefinition def)
+        {
+            if (def == null || CurrentClothingItem == null || SetupIds.SelectedIndex < 0) return;
+            // Convert definition to CloSubPalettes
+            try
+            {
+                var list = new List<CloSubPalette>();
+                foreach (var entry in def.Entries)
+                {
+                    var sp = new CloSubPalette { PaletteSet = entry.PaletteSetId };
+                    foreach (var r in entry.Ranges)
+                        sp.Ranges.Add(new CloSubPaletteRange { Offset = r.Offset * 8, NumColors = r.Length * 8 });
+                    if (sp.Ranges.Count > 0) list.Add(sp);
+                }
+                if (list.Count == 0) return;
+                _customCloSubPalettes = list;
+                _customShade = def.Shade;
+                _customActive = true; // ensure model uses custom path
+                var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
+                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
+                MainWindow.Instance?.RealtimeJsonSync();
+            }
+            catch { }
+        }
+
+        internal CustomPaletteDefinition GetCurrentSeedDefinition()
+        {
+            try { return BuildSeedDefinition(); } catch { return null; }
         }
     }
 }

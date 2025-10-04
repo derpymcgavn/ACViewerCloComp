@@ -11,112 +11,110 @@
         mc:Ignorable="d"
         Title="ACViewer" Width="1400" Height="860" Style="{DynamicResource CustomWindowStyle}" SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
 
-    <ad:DockingManager x:Name="DockManager">
-        <ad:DockingManager.Layout>
-            <adLayout:LayoutRoot>
-                <adLayout:LayoutPanel Orientation="Vertical">
-                    <!-- Docked Menu Bar -->
-                    <adLayout:LayoutAnchorablePane DockHeight="32">
-                        <adLayout:LayoutAnchorable Title="Menu" ContentId="Menu" CanClose="False" CanHide="False" CanAutoHide="False">
-                            <local:MainMenu x:Name="menuMain" />
-                        </adLayout:LayoutAnchorable>
-                    </adLayout:LayoutAnchorablePane>
+    <!-- Restructure: top-level DockPanel, MainMenu docked at top (outside DockingManager) -->
+    <DockPanel>
+        <local:MainMenu x:Name="menuMain" DockPanel.Dock="Top" />
 
-                    <!-- Main workspace -->
-                    <adLayout:LayoutPanel Orientation="Horizontal">
-                        <!-- Explorer Pane -->
-                        <adLayout:LayoutAnchorablePane DockWidth="320">
-                            <adLayout:LayoutAnchorable Title="Explorer" ContentId="Explorer" CanClose="False">
-                                <local:FileExplorer />
-                            </adLayout:LayoutAnchorable>
-                        </adLayout:LayoutAnchorablePane>
+        <ad:DockingManager x:Name="DockManager">
+            <ad:DockingManager.Layout>
+                <adLayout:LayoutRoot>
+                    <adLayout:LayoutPanel Orientation="Vertical">
+                        <!-- Main workspace (removed separate menu anchorable) -->
+                        <adLayout:LayoutPanel Orientation="Horizontal">
+                            <!-- Explorer Pane -->
+                            <adLayout:LayoutAnchorablePane DockWidth="320">
+                                <adLayout:LayoutAnchorable Title="Explorer" ContentId="Explorer" CanClose="False">
+                                    <local:FileExplorer />
+                                </adLayout:LayoutAnchorable>
+                            </adLayout:LayoutAnchorablePane>
 
-                        <!-- Center Documents -->
-                        <adLayout:LayoutDocumentPane>
-                            <adLayout:LayoutDocument Title="World" ContentId="Render" CanClose="False">
-                                <scenes:GameView x:Name="Scene" />
-                            </adLayout:LayoutDocument>
-                        </adLayout:LayoutDocumentPane>
+                            <!-- Center Documents -->
+                            <adLayout:LayoutDocumentPane>
+                                <adLayout:LayoutDocument Title="World" ContentId="Render" CanClose="False">
+                                    <scenes:GameView x:Name="Scene" />
+                                </adLayout:LayoutDocument>
+                            </adLayout:LayoutDocumentPane>
 
-                        <!-- Right side panes: Output + JSON Editor -->
-                        <adLayout:LayoutAnchorablePane DockWidth="430">
-                            <adLayout:LayoutAnchorable Title="Output" ContentId="Output" CanClose="False" CanHide="True">
-                                <TextBox x:Name="Status" TextWrapping="Wrap" Padding="4" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" IsReadOnly="True" FontFamily="Consolas" FontSize="12"/>
-                            </adLayout:LayoutAnchorable>
-                            <adLayout:LayoutAnchorable Title="Clothing JSON" ContentId="JsonEditor" CanClose="True" CanHide="True">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <!-- Toolbar -->
-                                        <RowDefinition Height="Auto" />
-                                        <!-- Search / Replace -->
-                                        <RowDefinition Height="Auto" />
-                                        <!-- Editor -->
-                                        <RowDefinition Height="*" />
-                                        <!-- Status -->
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
+                            <!-- Right side panes: Output + JSON Editor -->
+                            <adLayout:LayoutAnchorablePane DockWidth="430">
+                                <adLayout:LayoutAnchorable Title="Output" ContentId="Output" CanClose="False" CanHide="True">
+                                    <TextBox x:Name="Status" TextWrapping="Wrap" Padding="4" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" IsReadOnly="True" FontFamily="Consolas" FontSize="12"/>
+                                </adLayout:LayoutAnchorable>
+                                <adLayout:LayoutAnchorable Title="Clothing JSON" ContentId="JsonEditor" CanClose="True" CanHide="True">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <!-- Toolbar -->
+                                            <RowDefinition Height="Auto" />
+                                            <!-- Search / Replace -->
+                                            <RowDefinition Height="Auto" />
+                                            <!-- Editor -->
+                                            <RowDefinition Height="*" />
+                                            <!-- Status -->
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                                    <!-- Toolbar Row -->
-                                    <DockPanel Grid.Row="0" Margin="0,0,0,4" LastChildFill="False">
-                                        <WrapPanel>
-                                            <Button Content="Refresh" Width="70" Margin="0,0,4,4" Click="RefreshJson_Click" />
-                                            <Button Content="Apply" Width="70" Margin="0,0,4,4" Click="ApplyJson_Click" />
-                                            <Button Content="Format" Width="70" Margin="0,0,4,4" Click="FormatJson_Click" />
-                                            <Button Content="Minify" Width="70" Margin="0,0,4,4" Click="MinifyJson_Click" />
-                                            <Button Content="Validate" Width="70" Margin="0,0,4,4" Click="ValidateJson_Click" />
-                                            <Button Content="Diff" Width="60" Margin="0,0,4,4" Click="DiffJson_Click" />
-                                            <CheckBox x:Name="AutoApplyJson" Content="Auto-Apply" Margin="0,0,8,4" VerticalAlignment="Center" Checked="ToggleAutoApply_Checked" Unchecked="ToggleAutoApply_Checked" />
-                                            <CheckBox x:Name="LiveValidateJson" Content="Live Validate" Margin="0,0,8,4" VerticalAlignment="Center" IsChecked="True" />
-                                            <CheckBox x:Name="WrapJson" Content="Wrap" Margin="0,0,8,4" VerticalAlignment="Center" IsChecked="True" Checked="WrapJson_Checked" Unchecked="WrapJson_Checked" />
-                                        </WrapPanel>
-                                    </DockPanel>
+                                        <!-- Toolbar Row -->
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,4" LastChildFill="False">
+                                            <WrapPanel>
+                                                <Button Content="Refresh" Width="70" Margin="0,0,4,4" Click="RefreshJson_Click" />
+                                                <Button Content="Apply" Width="70" Margin="0,0,4,4" Click="ApplyJson_Click" />
+                                                <Button Content="Format" Width="70" Margin="0,0,4,4" Click="FormatJson_Click" />
+                                                <Button Content="Minify" Width="70" Margin="0,0,4,4" Click="MinifyJson_Click" />
+                                                <Button Content="Validate" Width="70" Margin="0,0,4,4" Click="ValidateJson_Click" />
+                                                <Button Content="Diff" Width="60" Margin="0,0,4,4" Click="DiffJson_Click" />
+                                                <CheckBox x:Name="AutoApplyJson" Content="Auto-Apply" Margin="0,0,8,4" VerticalAlignment="Center" Checked="ToggleAutoApply_Checked" Unchecked="ToggleAutoApply_Checked" />
+                                                <CheckBox x:Name="LiveValidateJson" Content="Live Validate" Margin="0,0,8,4" VerticalAlignment="Center" IsChecked="True" />
+                                                <CheckBox x:Name="WrapJson" Content="Wrap" Margin="0,0,8,4" VerticalAlignment="Center" IsChecked="True" Checked="WrapJson_Checked" Unchecked="WrapJson_Checked" />
+                                            </WrapPanel>
+                                        </DockPanel>
 
-                                    <!-- Search / Replace Row -->
-                                    <Border Grid.Row="1" BorderBrush="#444" BorderThickness="1" Padding="4" Margin="0,0,0,4">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBox x:Name="JsonSearchBox" Margin="0,0,4,0" TextChanged="JsonSearchBox_TextChanged" Tag="Search"/>
-                                            <TextBox x:Name="JsonReplaceBox" Grid.Column="1" Margin="0,0,4,0" Tag="Replace"/>
-                                            <Button Grid.Column="2" Content="Find Next" Width="80" Margin="0,0,4,0" Click="FindNextJson_Click" />
-                                            <Button Grid.Column="3" Content="Replace" Width="70" Margin="0,0,4,0" Click="ReplaceJson_Click" />
-                                            <Button Grid.Column="4" Content="Replace All" Width="90" Click="ReplaceAllJson_Click" />
+                                        <!-- Search / Replace Row -->
+                                        <Border Grid.Row="1" BorderBrush="#444" BorderThickness="1" Padding="4" Margin="0,0,0,4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="JsonSearchBox" Margin="0,0,4,0" TextChanged="JsonSearchBox_TextChanged" Tag="Search"/>
+                                                <TextBox x:Name="JsonReplaceBox" Grid.Column="1" Margin="0,0,4,0" Tag="Replace"/>
+                                                <Button Grid.Column="2" Content="Find Next" Width="80" Margin="0,0,4,0" Click="FindNextJson_Click" />
+                                                <Button Grid.Column="3" Content="Replace" Width="70" Margin="0,0,4,0" Click="ReplaceJson_Click" />
+                                                <Button Grid.Column="4" Content="Replace All" Width="90" Click="ReplaceAllJson_Click" />
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Editor Row -->
+                                        <Grid Grid.Row="2">
+                                            <TextBox x:Name="JsonEditorText" AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" TextChanged="JsonEditorText_TextChanged"/>
                                         </Grid>
-                                    </Border>
 
-                                    <!-- Editor Row -->
-                                    <Grid Grid.Row="2">
-                                        <TextBox x:Name="JsonEditorText" AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" TextChanged="JsonEditorText_TextChanged"/>
+                                        <!-- Status Row -->
+                                        <StatusBar Grid.Row="3" Margin="0,4,0,0">
+                                            <StatusBarItem>
+                                                <TextBlock x:Name="JsonCaretStatus" Text="Ln 1, Col 1" />
+                                            </StatusBarItem>
+                                            <StatusBarItem>
+                                                <TextBlock x:Name="JsonLengthStatus" Text="Len 0" />
+                                            </StatusBarItem>
+                                            <StatusBarItem>
+                                                <TextBlock x:Name="JsonValidationStatus" Text="Idle" />
+                                            </StatusBarItem>
+                                            <StatusBarItem>
+                                                <TextBlock x:Name="JsonDiffStatus" Text="Diff: 0" />
+                                            </StatusBarItem>
+                                        </StatusBar>
                                     </Grid>
-
-                                    <!-- Status Row -->
-                                    <StatusBar Grid.Row="3" Margin="0,4,0,0">
-                                        <StatusBarItem>
-                                            <TextBlock x:Name="JsonCaretStatus" Text="Ln 1, Col 1" />
-                                        </StatusBarItem>
-                                        <StatusBarItem>
-                                            <TextBlock x:Name="JsonLengthStatus" Text="Len 0" />
-                                        </StatusBarItem>
-                                        <StatusBarItem>
-                                            <TextBlock x:Name="JsonValidationStatus" Text="Idle" />
-                                        </StatusBarItem>
-                                        <StatusBarItem>
-                                            <TextBlock x:Name="JsonDiffStatus" Text="Diff: 0" />
-                                        </StatusBarItem>
-                                    </StatusBar>
-                                </Grid>
-                            </adLayout:LayoutAnchorable>
-                        </adLayout:LayoutAnchorablePane>
+                                </adLayout:LayoutAnchorable>
+                            </adLayout:LayoutAnchorablePane>
+                        </adLayout:LayoutPanel>
                     </adLayout:LayoutPanel>
-                </adLayout:LayoutPanel>
-            </adLayout:LayoutRoot>
-        </ad:DockingManager.Layout>
-    </ad:DockingManager>
+                </adLayout:LayoutRoot>
+            </ad:DockingManager.Layout>
+        </ad:DockingManager>
+    </DockPanel>
 
     <Window.InputBindings>
         <KeyBinding Command="{Binding FindCommand}" Gesture="Ctrl+F" />
