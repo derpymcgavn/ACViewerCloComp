@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace ACViewer.CustomTextures
 {
@@ -20,7 +21,13 @@ namespace ACViewer.CustomTextures
     {
         public Dictionary<string, ClothingBaseEffectExport> ClothingBaseEffects { get; set; } = new();
         public Dictionary<string, ClothingSubPalExport> ClothingSubPalEffects { get; set; } = new();
-        public List<CustomTextureOverrideExport> CustomTextureOverrides { get; set; } = new();
+        // Legacy ACViewer files may contain this section. CustomClothingBase ignores it;
+        // new exports bake replacements into ClothingBaseEffects and omit this property.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public List<CustomTextureOverrideExport> CustomTextureOverrides { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool AllowBaseOverride { get; set; }
+
         public string Id { get; set; }
     }
 

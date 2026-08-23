@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 
 using Microsoft.Xna.Framework;
@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework.Input;
 using MonoGame.Framework.WpfInterop;
 using MonoGame.Framework.WpfInterop.Input;
 
+using ACViewer.Config;
 using ACViewer.Enum;
 
 namespace ACViewer
@@ -26,8 +27,18 @@ namespace ACViewer
         public MouseState PrevMouseState { get; set; }
 
         public new Render.Render Render { get; set; }
-        
-        public static Camera Camera { get; set; }
+
+        private static Camera _camera;
+
+        public static Camera Camera
+        {
+            get => _camera;
+            set
+            {
+                _camera = value;
+                ApplyViewModeToCamera();
+            }
+        }
 
         public Player Player { get; set; }
 
@@ -46,25 +57,35 @@ namespace ACViewer
             get => _viewMode;
             set
             {
-                if (_viewMode == value) return;
-                
-                _viewMode = value;
+                if (_viewMode == value)
+                    return;
 
-                if (_viewMode == ViewMode.Model || _viewMode == ViewMode.WorldObject)
-                {
-                    Camera.Position = new Vector3(-10, -10, 10);
-                    Camera.Dir = Vector3.Normalize(-Camera.Position);
-                    Camera.Speed = Camera.Model_Speed;
-                    Camera.SetNearPlane(Camera.NearPlane_Model);
-                }
-                else if (_viewMode == ViewMode.Particle)
-                {
-                    Camera.InitParticle();
-                }
-                else if (_viewMode == ViewMode.World)
-                {
-                    Camera.SetNearPlane(Camera.NearPlane_World);
-                }
+                _viewMode = value;
+                ApplyViewModeToCamera();
+            }
+        }
+
+        private static void ApplyViewModeToCamera()
+        {
+            // Explorer selections can arrive before MonoGame has created the camera.
+            // Retain the requested mode and apply it when Render assigns Camera.
+            if (Camera == null)
+                return;
+
+            if (_viewMode == ViewMode.Model || _viewMode == ViewMode.WorldObject)
+            {
+                Camera.Position = new Vector3(-10, -10, 10);
+                Camera.Dir = Vector3.Normalize(-Camera.Position);
+                Camera.Speed = Camera.Model_Speed;
+                Camera.SetNearPlane(Camera.NearPlane_Model);
+            }
+            else if (_viewMode == ViewMode.Particle)
+            {
+                Camera.InitParticle();
+            }
+            else if (_viewMode == ViewMode.World)
+            {
+                Camera.SetNearPlane(Camera.NearPlane_World);
             }
         }
 
@@ -76,11 +97,15 @@ namespace ACViewer
         public SpriteFont Font { get; set; }
 
         // Background render location (user request)
-        private static readonly uint BackgroundObjCellId = 0xE927000B; // full cell id
         private static readonly uint BackgroundLandblockDid = 0xE927FFFF; // landblock file DID
         private static readonly Vector3 BackgroundPos = new Vector3(30.425781f, 58.958984f, 45.30615f);
         private static readonly Quaternion BackgroundOrient = new Quaternion(0f, 0f, -0.6084369f, 0.7936023f); // x,y,z,w
         private static bool BackgroundLoaded;
+        private bool _postInitComplete;
+
+        private static bool AreDatsReady =>
+            ACE.DatLoader.DatManager.PortalDat != null &&
+            ACE.DatLoader.DatManager.CellDat != null;
 
         protected override void Initialize()
         {
@@ -111,25 +136,53 @@ namespace ACViewer
         protected override void LoadContent()
         {
             base.LoadContent();
-
             Font = Content.Load<SpriteFont>("Fonts/Consolas");
         }
 
         public void PostInit()
         {
-            InitPlayer();
+            if (!AreDatsReady)
+                return;
 
-            Render = new Render.Render();
+            if (!_postInitComplete)
+            {
+                InitPlayer();
 
-            WorldViewer = new WorldViewer();
-            MapViewer = new MapViewer();
-            ModelViewer = new ModelViewer();
-            TextureViewer = new TextureViewer();
-            ParticleViewer = new ParticleViewer();
-            WorldObjectViewer = new WorldObjectViewer();
-            TextureGalleryViewer = new TextureGalleryViewer();
+                Render = new Render.Render();
 
-            TryLoadBackgroundLocation();
+                WorldViewer = new WorldViewer();
+                MapViewer = new MapViewer();
+                ModelViewer = new ModelViewer();
+                TextureViewer = new TextureViewer();
+                ParticleViewer = new ParticleViewer();
+                WorldObjectViewer = new WorldObjectViewer();
+                TextureGalleryViewer = new TextureGalleryViewer();
+
+                _postInitComplete = true;
+            }
+
+            // If the clothing editor already has a selected item, restore that scene now
+            // that the MonoGame viewers exist. Otherwise show the default background world.
+            if (!TryRestoreActiveClothingScene())
+                TryLoadBackgroundLocation();
+        }
+
+        private void EnsurePostInit()
+        {
+            if (_postInitComplete || !AreDatsReady)
+                return;
+
+            PostInit();
+        }
+
+        private static bool TryRestoreActiveClothingScene()
+        {
+            var clothingList = View.ClothingTableList.Instance;
+            if (clothingList == null || View.ClothingTableList.CurrentClothingItem == null)
+                return false;
+
+            clothingList.LoadModelWithClothingBase();
+            return true;
         }
 
         private void TryLoadBackgroundLocation()
@@ -162,6 +215,8 @@ namespace ACViewer
 
         protected override void Update(GameTime time)
         {
+            EnsurePostInit();
+
             // every update we can now query the keyboard & mouse for our WpfGame
             var keyboardState = _keyboard.GetState();
             var mouseState = _mouse.GetState();
@@ -170,7 +225,7 @@ namespace ACViewer
             {
                 // cancel all emitters in progress
                 // this handles both ParticleViewer and ModelViewer
-                Player.PhysicsObj.destroy_particle_manager();
+                Player?.PhysicsObj?.destroy_particle_manager();
             }
 
             /*if (keyboardState.IsKeyDown(Keys.L) && !PrevKeyboardState.IsKeyDown(Keys.L))
@@ -188,25 +243,25 @@ namespace ACViewer
             switch (ViewMode)
             {
                 case ViewMode.Texture:
-                    TextureViewer.Update(time);
+                    TextureViewer?.Update(time);
                     break;
                 case ViewMode.Model:
-                    ModelViewer.Update(time);
+                    ModelViewer?.Update(time);
                     break;
                 case ViewMode.World:
-                    WorldViewer.Update(time);
+                    WorldViewer?.Update(time);
                     break;
                 case ViewMode.Map:
-                    MapViewer.Update(time);
+                    MapViewer?.Update(time);
                     break;
                 case ViewMode.Particle:
-                    ParticleViewer.Update(time);
+                    ParticleViewer?.Update(time);
                     break;
                 case ViewMode.WorldObject:
-                    WorldObjectViewer.Update(time);
+                    WorldObjectViewer?.Update(time);
                     break;
                 case ViewMode.TextureGallery:
-                    TextureGalleryViewer.Update(time);
+                    TextureGalleryViewer?.Update(time);
                     break;
             }
 
@@ -218,28 +273,31 @@ namespace ACViewer
 
         protected override void Draw(GameTime time)
         {
+            if (ViewMode == ViewMode.Model && ModelViewer == null)
+                GraphicsDevice.Clear(ConfigManager.Config.BackgroundColors.ModelViewer);
+
             switch (ViewMode)
             {
                 case ViewMode.Texture:
-                    TextureViewer.Draw(time);
+                    TextureViewer?.Draw(time);
                     break;
                 case ViewMode.Model:
-                    ModelViewer.Draw(time);
+                    ModelViewer?.Draw(time);
                     break;
                 case ViewMode.World:
-                    WorldViewer.Draw(time);
+                    WorldViewer?.Draw(time);
                     break;
                 case ViewMode.Map:
-                    MapViewer.Draw(time);
+                    MapViewer?.Draw(time);
                     break;
                 case ViewMode.Particle:
-                    ParticleViewer.Draw(time);
+                    ParticleViewer?.Draw(time);
                     break;
                 case ViewMode.WorldObject:
-                    WorldObjectViewer.Draw(time);
+                    WorldObjectViewer?.Draw(time);
                     break;
                 case ViewMode.TextureGallery:
-                    TextureGalleryViewer.Draw(time);
+                    TextureGalleryViewer?.Draw(time);
                     break;
             }
 

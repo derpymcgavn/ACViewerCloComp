@@ -2,7 +2,7 @@
 
 namespace ACViewer.Data
 {
-    public class DIDTable: IEquatable<DIDTable>
+    public class DIDTable : IEquatable<DIDTable>
     {
         public uint SetupID { get; set; }
         public uint MotionTableID { get; set; }

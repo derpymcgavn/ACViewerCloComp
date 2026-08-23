@@ -1,4 +1,4 @@
-﻿<Window x:Class="ACViewer.View.MainWindow"
+<Window x:Class="ACViewer.View.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -9,34 +9,50 @@
         xmlns:adLayout="clr-namespace:AvalonDock.Layout;assembly=AvalonDock"
         d:DataContext="{d:DesignInstance Type=local:MainWindow}"
         mc:Ignorable="d"
-        Title="ACViewer" Width="1400" Height="860" Style="{DynamicResource CustomWindowStyle}" SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
+        Title="DerpACE Clothing Studio - CloComp" Width="1400" Height="860" Style="{DynamicResource CustomWindowStyle}" SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
 
     <!-- Restructure: top-level DockPanel, MainMenu docked at top (outside DockingManager) -->
     <DockPanel>
         <local:MainMenu x:Name="menuMain" DockPanel.Dock="Top" />
 
+        <Border x:Name="PrecachePanel" DockPanel.Dock="Top" Visibility="Collapsed" Background="#252526" BorderBrush="#3F3F46" BorderThickness="0,0,0,1" Padding="8,5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="220" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="DAT precache" FontWeight="SemiBold" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <ProgressBar x:Name="PrecacheProgressBar" Grid.Column="1" Height="14" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" />
+                <TextBlock x:Name="PrecacheProgressText" Grid.Column="2" Text="Waiting..." Margin="10,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="#DCDCDC" />
+            </Grid>
+        </Border>
+
         <ad:DockingManager x:Name="DockManager">
             <ad:DockingManager.Layout>
                 <adLayout:LayoutRoot>
                     <adLayout:LayoutPanel Orientation="Vertical">
-                        <!-- Main workspace (removed separate menu anchorable) -->
+                        <!-- Primary workspace: navigation, model, and the persistent Clothing Studio. -->
                         <adLayout:LayoutPanel Orientation="Horizontal">
-                            <!-- Explorer Pane -->
-                            <adLayout:LayoutAnchorablePane DockWidth="320">
+                            <adLayout:LayoutAnchorablePane DockWidth="340">
                                 <adLayout:LayoutAnchorable Title="Explorer" ContentId="Explorer" CanClose="False">
                                     <local:FileExplorer />
                                 </adLayout:LayoutAnchorable>
                             </adLayout:LayoutAnchorablePane>
-
-                            <!-- Center Documents -->
                             <adLayout:LayoutDocumentPane>
-                                <adLayout:LayoutDocument Title="World" ContentId="Render" CanClose="False">
+                                <adLayout:LayoutDocument Title="3D Preview" ContentId="Render" CanClose="False">
                                     <scenes:GameView x:Name="Scene" />
                                 </adLayout:LayoutDocument>
                             </adLayout:LayoutDocumentPane>
+                            <adLayout:LayoutAnchorablePane DockWidth="620">
+                                <adLayout:LayoutAnchorable Title="Clothing Studio" ContentId="CustomPaletteDock" CanClose="False" CanHide="True" CanAutoHide="True">
+                                    <local:CustomPaletteDialog />
+                                </adLayout:LayoutAnchorable>
+                            </adLayout:LayoutAnchorablePane>
+                        </adLayout:LayoutPanel>
 
-                            <!-- Right side panes: Output + JSON Editor -->
-                            <adLayout:LayoutAnchorablePane DockWidth="430">
+                        <!-- Diagnostics are supporting tools and belong below the editing workspace. -->
+                        <adLayout:LayoutAnchorablePane DockHeight="220">
                                 <adLayout:LayoutAnchorable Title="Output" ContentId="Output" CanClose="False" CanHide="True">
                                     <TextBox x:Name="Status" TextWrapping="Wrap" Padding="4" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" IsReadOnly="True" FontFamily="Consolas" FontSize="12"/>
                                 </adLayout:LayoutAnchorable>
@@ -108,8 +124,7 @@
                                         </StatusBar>
                                     </Grid>
                                 </adLayout:LayoutAnchorable>
-                            </adLayout:LayoutAnchorablePane>
-                        </adLayout:LayoutPanel>
+                        </adLayout:LayoutAnchorablePane>
                     </adLayout:LayoutPanel>
                 </adLayout:LayoutRoot>
             </ad:DockingManager.Layout>

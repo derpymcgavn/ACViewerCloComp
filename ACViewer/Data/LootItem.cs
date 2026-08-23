@@ -12,7 +12,7 @@ namespace ACViewer.Data
         public string Name { get; set; }
         public string ClothingBase { get; set; }
         public uint PaletteTemplate { get; set; }
-        public float Shade{ get; set; }
+        public float Shade { get; set; }
 
         public LootItem() { }
 

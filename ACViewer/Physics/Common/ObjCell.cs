@@ -11,7 +11,7 @@ using ACE.Server.Physics.Managers;
 
 namespace ACE.Server.Physics.Common
 {
-    public class ObjCell: PartCell, IEquatable<ObjCell>
+    public class ObjCell : PartCell, IEquatable<ObjCell>
     {
         public uint ID;
         public LandDefs.WaterType WaterType;
@@ -49,12 +49,12 @@ namespace ACE.Server.Physics.Common
 
         public static readonly ObjCell EmptyCell = new ObjCell();
 
-        public ObjCell(): base()
+        public ObjCell() : base()
         {
             Init();
         }
 
-        public ObjCell(uint cellID): base()
+        public ObjCell(uint cellID) : base()
         {
             ID = cellID;
             Init();
@@ -171,8 +171,8 @@ namespace ACE.Server.Physics.Common
                     // clip through dynamic non-target objects
                     // now uses ObjectInfo.TargetId in FindObjCollisions / MissileIgnore
                     //if (target != null && !obj.Equals(target) && /*!obj.State.HasFlag(PhysicsState.Static)*/
-                        //obj.WeenieObj.IsCreature())
-                        //continue;
+                    //obj.WeenieObj.IsCreature())
+                    //continue;
 
                     var state = obj.FindObjCollisions(transition);
                     if (state != TransitionState.OK)
@@ -356,7 +356,7 @@ namespace ACE.Server.Physics.Common
                 }
                 //var checkCells = cellArray.Cells.Values.ToList();
                 //foreach (var cell in checkCells)
-                    //cell.find_transit_cells(position, numSphere, sphere, cellArray, path);
+                //cell.find_transit_cells(position, numSphere, sphere, cellArray, path);
 
                 if (currCell != null)
                 {

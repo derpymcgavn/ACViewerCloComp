@@ -229,7 +229,7 @@ namespace ACE.Server.Physics.Common
             /*if (wo is Player player)
                 player.HandleFallingDamage(prof);
             else*/
-                wo.OnCollideEnvironment();
+            wo.OnCollideEnvironment();
 
             return 0;
         }

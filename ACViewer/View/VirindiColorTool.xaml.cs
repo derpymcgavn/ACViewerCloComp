@@ -44,7 +44,7 @@ namespace ACViewer.View
             }
 
             var icon = ClothingTableList.GetIcon();
-            if(icon == 0)
+            if (icon == 0)
             {
                 imgIcon.Visibility = Visibility.Hidden;
             }

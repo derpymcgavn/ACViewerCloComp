@@ -45,7 +45,7 @@ namespace ACViewer.Model
         public SetupInstance(uint setupID, ObjDesc objDesc)
         {
             Setup = new Setup(setupID, objDesc);
-            
+
             Position = Vector3.Zero;
             Rotation = Quaternion.Identity;
             Scale = Vector3.One;
@@ -124,7 +124,7 @@ namespace ACViewer.Model
                 {
                     // TODO: improve rendering for 2-sided faces
                     //if (polygon._polygon.Stippling == ACE.Entity.Enum.StipplingType.NoPos) continue;
-                    
+
                     if (polyIdx != -1 && polyIdx != curPolyIdx)
                     {
                         curPolyIdx++;

@@ -9,7 +9,7 @@ using ACE.DatLoader.FileTypes;
 
 namespace ACViewer.Model
 {
-    public class PaletteChanges: IEquatable<PaletteChanges>
+    public class PaletteChanges : IEquatable<PaletteChanges>
     {
         public List<CloSubPalette> CloSubPalettes { get; set; }   // from ClothingTable.ClothingSubPalEffects[PaletteTemplate]
 
@@ -27,12 +27,12 @@ namespace ACViewer.Model
 
         public void Add(List<CloSubPalette> subPalettes, float shade = 0.0f)
         {
-            // Merge new sub palettes with existing, then rebuild palette ids in one pass
-            var combined = new List<CloSubPalette>(CloSubPalettes);
-            combined.AddRange(subPalettes);
-            CloSubPalettes = MergeSubPalettes(combined);
-            _shadeUsed = shade; // treat most recent shade as authoritative
-            PaletteIds = GetPaletteIDs(CloSubPalettes, shade);
+            // Keep previously resolved palette IDs: separate clothing layers may use different shades.
+            var incoming = MergeSubPalettes(subPalettes);
+            CloSubPalettes = new List<CloSubPalette>(CloSubPalettes);
+            CloSubPalettes.AddRange(incoming);
+            PaletteIds.AddRange(GetPaletteIDs(incoming, shade));
+            _shadeUsed = shade;
             Validate();
         }
 
@@ -207,7 +207,7 @@ namespace ACViewer.Model
                 if (PaletteIds[i] != paletteChanges.PaletteIds[i])
                     return false;
             }
-            
+
             return true;
         }
 

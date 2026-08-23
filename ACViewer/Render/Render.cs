@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -25,7 +25,7 @@ namespace ACViewer.Render
 
         // multiple SamplerStates in the same .fx file apparently don't work
         public static Effect Effect_Clamp { get; set; }
-        
+
         // Add to existing properties
         private MapViewerOptions Config => ConfigManager.Config.MapViewer;
 
@@ -42,10 +42,15 @@ namespace ACViewer.Render
             Init();
         }
 
+        private static string GetContentPath(params string[] parts)
+        {
+            return Path.Combine(new[] { AppContext.BaseDirectory, "Content" }.Concat(parts).ToArray());
+        }
+
         public void Init()
         {
-            Effect = new Effect(GraphicsDevice, File.ReadAllBytes("Content/texture.mgfxo"));
-            Effect_Clamp = new Effect(GraphicsDevice, File.ReadAllBytes("Content/texture_clamp.mgfxo"));
+            Effect = new Effect(GraphicsDevice, File.ReadAllBytes(GetContentPath("texture.mgfxo")));
+            Effect_Clamp = new Effect(GraphicsDevice, File.ReadAllBytes(GetContentPath("texture_clamp.mgfxo")));
 
             if (Camera == null)
                 Camera = new Camera(GameView.Instance);
@@ -70,13 +75,13 @@ namespace ACViewer.Render
 
             GraphicsDevice.RasterizerState = rs;
         }
-        
+
         public void Draw()
         {
             GraphicsDevice.Clear(ConfigManager.Config.BackgroundColors.WorldViewer);
 
             SetRasterizerState(false);
-    
+
             Effect.Parameters["xView"].SetValue(Camera.ViewMatrix);
             Effect_Clamp.Parameters["xView"].SetValue(Camera.ViewMatrix);
 
@@ -97,7 +102,7 @@ namespace ACViewer.Render
         {
             ParticlesInitted = false;
             EmitterParentObjs = new List<PhysicsObj>();
-            
+
             if (!MainMenu.ShowParticles) return;
 
             foreach (var landblock in LScape.Landblocks.Values)
@@ -151,8 +156,8 @@ namespace ACViewer.Render
             PerfTimer.Start(ProfilerSection.ParticleUpdate);
 
             //foreach (var emitterObj in EmitterParentObjs)
-                //emitterObj.ParticleManager.UpdateParticles();
-            
+            //emitterObj.ParticleManager.UpdateParticles();
+
             Parallel.ForEach(EmitterParentObjs, emitterObj =>
             {
                 emitterObj.ParticleManager.UpdateParticles();
@@ -195,13 +200,13 @@ namespace ACViewer.Render
         public void DrawHUD()
         {
             var text = "";
-    
+
             if (ConfigManager.Config.MapViewer.EnableZSlicing)
             {
                 var config = ConfigManager.Config.MapViewer;
                 string levelPrefix = config.CurrentZLevel < 0 ? "B" : "";  // Add "B" prefix for basement levels
                 int displayLevel = config.CurrentZLevel < 0 ? -config.CurrentZLevel : config.CurrentZLevel;
-        
+
                 text += $"Current Z-Level: {levelPrefix}{displayLevel}\n";  // Shows B1, B2, etc. for basement levels
                 text += $"Height Range: {(config.CurrentZLevel - 1) * config.LevelHeight:F1}m - {config.CurrentZLevel * config.LevelHeight:F1}m\n";
             }

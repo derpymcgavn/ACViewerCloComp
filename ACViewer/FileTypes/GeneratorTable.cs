@@ -34,7 +34,7 @@ namespace ACViewer.FileTypes
         public List<TreeNode> BuildGenerators(List<ACE.DatLoader.Entity.Generator> generators)
         {
             var nodes = new List<TreeNode>();
-            
+
             foreach (var item in generators)
             {
                 var heading = item.Id != 0 ? $"{item.Id} - {item.Name}" : item.Name;

@@ -78,7 +78,7 @@ namespace ACE.Server.WorldObjects
                 DefaultLocked = true;
 
             //if (DefaultLocked) // ignore regen interval, only regen on relock
-                //NextGeneratorRegenerationTime = double.MaxValue;
+            //NextGeneratorRegenerationTime = double.MaxValue;
         }
 
         public string LockCode

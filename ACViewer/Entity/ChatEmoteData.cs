@@ -17,7 +17,7 @@ namespace ACViewer.Entity
 
             treeNode.Add(new TreeNode($"MyEmote: {_chatEmoteData.MyEmote}"));
             treeNode.Add(new TreeNode($"OtherEmote: {_chatEmoteData.OtherEmote}"));
-            
+
             return treeNode;
         }
     }

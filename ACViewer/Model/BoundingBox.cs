@@ -15,7 +15,7 @@ namespace ACViewer.Model
         public Vector3 Maxs { get; set; }
 
         public Vector3 Size { get; set; }
-        
+
         public float MaxSize { get; set; }
 
         public Vector3 Center { get; set; }
@@ -89,7 +89,7 @@ namespace ACViewer.Model
             MaxSize = Math.Max(Math.Max(Size.X, Size.Y), Size.Z);
 
             var halfSize = Size * 0.5f;
-            
+
             Center = new Vector3(Mins.X + halfSize.X, Mins.Y + halfSize.Y, Mins.Z + halfSize.Z);
 
             //Console.WriteLine("Mins: " + Mins);
@@ -143,7 +143,7 @@ namespace ACViewer.Model
             var sorted = eval.OrderByDescending(i => i.Area).ToList();
 
             //foreach (var face in sorted)
-                //Console.WriteLine($"Face: {face.Facing} - Area: {face.Area}");
+            //Console.WriteLine($"Face: {face.Facing} - Area: {face.Area}");
 
             var mostArea = sorted[0];
 

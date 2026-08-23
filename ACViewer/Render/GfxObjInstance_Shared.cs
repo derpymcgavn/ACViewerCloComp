@@ -16,7 +16,7 @@ namespace ACViewer.Render
         public GraphicsDevice GraphicsDevice => GameView.Instance.GraphicsDevice;
 
         public Effect Effect => Render.Effect;
-        
+
         public Effect Effect_Clamp => Render.Effect_Clamp;
 
         public GfxObj GfxObj { get; set; }
@@ -26,7 +26,7 @@ namespace ACViewer.Render
         public Dictionary<TextureFormatChain, GfxObjInstance_TextureFormat> BaseFormats_Alpha { get; set; }
 
         public List<VertexPositionNormalTextures> Vertices { get; set; }
-        
+
         public List<VertexInstance> Instances { get; set; }
         public VertexInstance[] Instances_ { get; set; }
 
@@ -66,7 +66,7 @@ namespace ACViewer.Render
 
                 var textureId = TextureCache.GetSurfaceTextureID(surfaceID, textureChanges);
                 var texture = TextureCache.Get(surfaceID, textureId, paletteChanges);
-                
+
                 var textureFormat = new TextureFormat(texture.Format, texture.Width, texture.Height, gfxObj.HasWrappingUVs);
 
                 if (!textureAtlasChains.TryGetValue(textureFormat, out var textureAtlasChain))
@@ -114,7 +114,7 @@ namespace ACViewer.Render
         private void BuildBuffers()
         {
             if (Vertices.Count == 0) return;
-            
+
             // build base buffers
 
             // build shared vertex buffer
@@ -138,18 +138,18 @@ namespace ACViewer.Render
         private void BuildBindings()
         {
             if (Shared_VB == null) return;
-            
+
             Bindings = new VertexBufferBinding[2];
             Bindings[0] = new VertexBufferBinding(Shared_VB);
             Bindings[1] = new VertexBufferBinding(Instances_VB, 0, 1);
         }
 
         private bool isDirty { get; set; }
-        
+
         public void UpdateInstance(int idx, Vector3 position, Quaternion orientation, Vector3 scale)
         {
             if (Instances_ == null) return;
-            
+
             Instances_[idx].Position = position;
             Instances_[idx].Orientation = new Vector4(orientation.X, orientation.Y, orientation.Z, orientation.W);
             Instances_[idx].Scale = scale;
@@ -159,13 +159,13 @@ namespace ACViewer.Render
         public void Draw()
         {
             if (Bindings == null) return;
-            
+
             if (isDirty)
             {
                 Instances_VB.SetData(Instances_);
                 isDirty = false;
             }
-            
+
             GraphicsDevice.SetVertexBuffers(Bindings);
 
             Effect.CurrentTechnique = Effect.Techniques["TexturedInstance"];
@@ -183,7 +183,7 @@ namespace ACViewer.Render
             foreach (var baseFormat in BaseFormats_Alpha.Values)
                 baseFormat.Draw(Instances.Count);
         }
-        
+
         public void DrawFiltered(Func<Vector3, bool> filter)
         {
             if (Bindings == null) return;
@@ -196,10 +196,10 @@ namespace ACViewer.Render
 
             // Store original instances
             var originalInstances = Instances_.ToArray();
-        
+
             // Filter instances
             var filteredInstances = Instances.Where(instance => filter(instance.Position)).ToArray();
-        
+
             if (filteredInstances.Length > 0)
             {
                 // Update vertex buffer with filtered instances

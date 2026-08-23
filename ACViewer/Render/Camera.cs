@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Input;
 
 using Microsoft.Xna.Framework;
@@ -55,7 +55,7 @@ namespace ACViewer
         public Camera(GameView game)
         {
             GameView = game;
-            
+
             Init();
         }
 
@@ -84,7 +84,7 @@ namespace ACViewer
         {
             NearPlane = nearPlane;
             CreateProjection();
-            
+
             Render.Render.Effect.Parameters["xProjection"].SetValue(ProjectionMatrix);
             Render.Render.Effect_Clamp.Parameters["xProjection"].SetValue(ProjectionMatrix);
         }
@@ -95,7 +95,7 @@ namespace ACViewer
             var y = landblock.Landblock.ID >> 16 & 0xFF;
 
             var height = landblock.Landblock.Polygons[0].Vertices[0].Origin.Z;
-            
+
             Position = new Vector3(x * 192.0f, y * 192.0f, height + 50.0f);
 
             var lookAt = new Vector3(x * 192.0f + 96.0f, y * 192.0f + 96.0f, height);
@@ -166,9 +166,13 @@ namespace ACViewer
             //var box = setup.BoundingBox;
             var size = box.Size;
 
-            if (float.IsInfinity(size.X))
+            if (float.IsInfinity(size.X) || float.IsInfinity(size.Y) || float.IsInfinity(size.Z) || float.IsNaN(size.X) || float.IsNaN(size.Y) || float.IsNaN(size.Z))
             {
-                InitParticle();
+                Position = new Vector3(0.0f, -4.0f, 1.8f);
+                Dir = Vector3.Normalize(new Vector3(0.0f, 0.0f, 1.15f) - Position);
+                Up = Vector3.UnitZ;
+                Speed = Model_Speed;
+                CreateLookAt();
                 return;
             }
 
@@ -189,7 +193,7 @@ namespace ACViewer
             //Console.WriteLine($"Width: {face.Width}, Height: {face.Height}");
 
             var gfxObjMode = ModelViewer.Instance.GfxObjMode;
-            
+
             if (facing == Facing.Front || facing == Facing.Back)
             {
                 if (gfxObjMode)
@@ -298,7 +302,7 @@ namespace ACViewer
             // Shift key control for downward movement
             if (keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift))
                 Position -= Up * Speed;
-            
+
             // Z-level controls
             if (keyboardState.IsKeyDown(Keys.F3) && !LastKeyboardState.IsKeyDown(Keys.F3))
             {
@@ -319,7 +323,7 @@ namespace ACViewer
                 }
             }
 
-            LastKeyboardState = keyboardState; 
+            LastKeyboardState = keyboardState;
 
             // camera speed control
             if (mouseState.ScrollWheelValue != PrevMouseState.ScrollWheelValue)
@@ -343,7 +347,7 @@ namespace ACViewer
                 if (PrevMouseState.RightButton == ButtonState.Pressed)
                 {
                     MouseEx.GetCursorPos(out var cursorPos);
-                    
+
                     var xDiff = cursorPos.X - (int)LastSetPoint.X;
                     var yDiff = cursorPos.Y - (int)LastSetPoint.Y;
 
@@ -402,7 +406,7 @@ namespace ACViewer
             // 255 landblocks across * 192 meters for each landblock = 48,960 meters across Dereth
             if (GameView.ViewMode == ViewMode.World && (Position.X < 0.0f || Position.Y < 0.0f || Position.X > 48960.0f || Position.Y > 48960.0f))
                 return null;
-            
+
             var lbx = (int)(Position.X / 192.0f);
             var lby = (int)(Position.Y / 192.0f);
 
@@ -413,7 +417,7 @@ namespace ACViewer
             var cellY = (int)(y / 24.0f);
 
             var cell = cellX * 8 + cellY + 1;
-            
+
             var objCellId = (uint)(lbx << 24 | lby << 16 | cell);
 
             var yaw = Math.Atan2(-Dir.X, Dir.Y);

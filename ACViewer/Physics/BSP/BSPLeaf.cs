@@ -7,17 +7,17 @@ using ACViewer;
 
 namespace ACE.Server.Physics.BSP
 {
-    public class BSPLeaf: BSPNode, IEquatable<BSPLeaf>
+    public class BSPLeaf : BSPNode, IEquatable<BSPLeaf>
     {
         public int LeafIdx;
         public bool Solid;
 
-        public BSPLeaf(): base()
+        public BSPLeaf() : base()
         {
             LeafIdx = -1;
         }
 
-        public BSPLeaf(BSPTreeType type): base(type)
+        public BSPLeaf(BSPTreeType type) : base(type)
         {
         }
 

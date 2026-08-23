@@ -65,7 +65,7 @@ namespace ACViewer.Render
                 gfxObj.BuildBoundingBox();
 
                 //if (gfxObj.BoundingBox.Size.Y != 0)
-                    //Console.WriteLine($"Warning: Found particle BoundingBox where Size.Y > 0 for {gfxObj._gfxObj.Id:X8}");
+                //Console.WriteLine($"Warning: Found particle BoundingBox where Size.Y > 0 for {gfxObj._gfxObj.Id:X8}");
 
                 //Console.WriteLine($"{gfxObj._gfxObj.Id:X8} bbox: {gfxObj.BoundingBox.Mins} - {gfxObj.BoundingBox.Maxs}");
             }

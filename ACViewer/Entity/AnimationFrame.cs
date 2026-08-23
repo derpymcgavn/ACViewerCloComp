@@ -26,7 +26,7 @@ namespace ACViewer.Entity
                 if (_animationFrame.Hooks.Count == 1)
                 {
                     var _hook = _animationFrame.Hooks[0];
-                    
+
                     var hookNode = new TreeNode($"HookType: {_hook.HookType}");
 
                     var hook = AnimationHook.Create(_hook);

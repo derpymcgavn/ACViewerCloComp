@@ -20,7 +20,7 @@ namespace ACViewer.Entity
             
             if (!string.IsNullOrEmpty(_generator.Name))
                 treeNode.Add(new TreeNode($"Name: {_generator.Name}"));*/
-            
+
             if (_generator.Items.Count > 0)
             {
                 //var items = new TreeNode($"Items");

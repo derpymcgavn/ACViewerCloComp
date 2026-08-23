@@ -9,14 +9,14 @@ namespace ACViewer.Config
     {
         [JsonConverter(typeof(JsonConverter_Color))]
         public Color ModelViewer { get; set; }
-        
-        [JsonConverter(typeof(JsonConverter_Color))] 
+
+        [JsonConverter(typeof(JsonConverter_Color))]
         public Color ParticleViewer { get; set; }
-        
-        [JsonConverter(typeof(JsonConverter_Color))] 
+
+        [JsonConverter(typeof(JsonConverter_Color))]
         public Color TextureViewer { get; set; }
-        
-        [JsonConverter(typeof(JsonConverter_Color))] 
+
+        [JsonConverter(typeof(JsonConverter_Color))]
         public Color WorldViewer { get; set; }
 
         public BackgroundColors()

@@ -22,7 +22,7 @@ namespace ACViewer.Render
 
             for (var i = 0; i < System.Enum.GetValues(typeof(ProfilerSection)).Length; i++)
                 Timers.Add(new Stopwatch());
-            
+
             LastOutput = DateTime.Now;
         }
 
@@ -45,7 +45,7 @@ namespace ACViewer.Render
             if (currentTime - LastOutput > OutputInterval)
             {
                 var output = 0;
-                
+
                 for (var i = 0; i < Timers.Count; i++)
                 {
                     var elapsed = Timers[i].Elapsed.TotalMilliseconds;
@@ -66,7 +66,7 @@ namespace ACViewer.Render
 
                 return true;
             }
-            
+
             return false;
         }
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace ACViewer.Model
@@ -17,6 +17,11 @@ namespace ACViewer.Model
             Cache = new Dictionary<uint, GfxObj>();
         }
 
+
+        public static bool TryGet(uint gfxObjID, out GfxObj gfxObj)
+        {
+            return Cache.TryGetValue(gfxObjID, out gfxObj);
+        }
         public static GfxObj Get(uint gfxObjID)
         {
             if (!Cache.TryGetValue(gfxObjID, out var gfxObj))

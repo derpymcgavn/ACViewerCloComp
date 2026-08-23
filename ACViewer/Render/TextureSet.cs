@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace ACViewer.Render
 {
-    public class TextureSet: IEquatable<TextureSet>
+    public class TextureSet : IEquatable<TextureSet>
     {
         public uint Environment { get; set; }
         public List<uint> SurfaceIDs { get; set; }

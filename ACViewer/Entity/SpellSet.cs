@@ -21,7 +21,7 @@ namespace ACViewer.Entity
             {
                 var spellSetTier = new TreeNode(kvp.Key.ToString());
                 spellSetTier.Items = new SpellSetTier(kvp.Value).BuildTree();
-                
+
                 spellSetTiers.Items.Add(spellSetTier);
             }
             treeNode.Add(spellSetTiers);

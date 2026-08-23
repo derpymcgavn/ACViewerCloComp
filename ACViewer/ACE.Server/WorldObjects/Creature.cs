@@ -19,7 +19,7 @@ namespace ACE.Server.WorldObjects
             InitializePropertyDictionaries();
             SetEphemeralValues();
         }
-        
+
         /// <summary>
         /// A new biota be created taking all of its values from weenie.
         /// </summary>
@@ -158,9 +158,9 @@ namespace ACE.Server.WorldObjects
             if (sex.HairStyleList.Count > 1)
             {
                 //if (PropertyManager.GetBool("npc_hairstyle_fullrange").Item)
-                    //appearance.HairStyle = (uint)ThreadSafeRandom.Next(0, sex.HairStyleList.Count - 1);
+                //appearance.HairStyle = (uint)ThreadSafeRandom.Next(0, sex.HairStyleList.Count - 1);
                 //else
-                    appearance.HairStyle = (uint)ThreadSafeRandom.Next(0, Math.Min(sex.HairStyleList.Count - 1, 8)); // retail range data compiled by OptimShi
+                appearance.HairStyle = (uint)ThreadSafeRandom.Next(0, Math.Min(sex.HairStyleList.Count - 1, 8)); // retail range data compiled by OptimShi
             }
             else
                 appearance.HairStyle = 0;

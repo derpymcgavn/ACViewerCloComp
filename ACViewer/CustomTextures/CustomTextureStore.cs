@@ -2,9 +2,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using ACE.DatLoader;
 using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
 using System;
+using ACViewer.CustomPalettes;
+using ACViewer.Config;
 using System.Reflection;
 using System.Threading;
 
@@ -12,7 +15,19 @@ namespace ACViewer.CustomTextures
 {
     public static class CustomTextureStore
     {
-        private const string FileName = "CustomTextures.json";
+        private const string LegacyFileName = "CustomTextures.json";
+        private static string FileName
+        {
+            get
+            {
+                var directory = ConfigManager.AppDataDirectory;
+                Directory.CreateDirectory(directory);
+                var fileName = Path.Combine(directory, LegacyFileName);
+                if (!File.Exists(fileName) && File.Exists(LegacyFileName))
+                    File.Copy(LegacyFileName, fileName);
+                return fileName;
+            }
+        }
         private static List<CustomTextureDefinition> _cache;
 
         // Added watcher for real-time updates of last imported JSON file
@@ -46,11 +61,27 @@ namespace ACViewer.CustomTextures
             File.WriteAllText(FileName, JsonConvert.SerializeObject(all, Formatting.Indented));
         }
 
-        // New: export clothing table (with optional overrides) to requested JSON format
-        public static void ExportClothingTable(ClothingTable table, string path, CustomTextureDefinition overrides = null)
+        /// <summary>
+        /// Exports an OptimShi/CustomClothingBase-compatible JSON file. Palette and texture edits
+        /// are baked into a cloned ClothingTable, validated, written, and imported again to prove
+        /// that no supported data was lost in serialization.
+        /// </summary>
+        public static void ExportClothingTable(ClothingTable table, string path, CustomTextureDefinition overrides = null,
+            CustomPaletteDefinition palette = null, uint? paletteTemplate = null, uint? icon = null)
         {
-            var export = new ClothingExport { Id = $"0x{table.Id:X8}" };
-            foreach (var kvp in table.ClothingBaseEffects)
+            if (table == null) throw new ArgumentNullException(nameof(table));
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("An export path is required.", nameof(path));
+
+            var composed = ClothingModService.Compose(table, overrides, palette, paletteTemplate, icon);
+            var validationErrors = ClothingModService.Validate(composed);
+            if (validationErrors.Count > 0)
+                throw new InvalidDataException("ClothingMod validation failed:\n- " + string.Join("\n- ", validationErrors));
+            var export = new ClothingExport
+            {
+                Id = $"0x{composed.Id:X8}",
+                AllowBaseOverride = DatManager.PortalDat?.AllFiles?.ContainsKey(composed.Id) == true
+            };
+            foreach (var kvp in composed.ClothingBaseEffects)
             {
                 var baseOut = new ClothingBaseEffectExport();
                 foreach (var objEff in kvp.Value.CloObjectEffects)
@@ -62,9 +93,9 @@ namespace ACViewer.CustomTextures
                     }
                     baseOut.CloObjectEffects.Add(objOut);
                 }
-                export.ClothingBaseEffects[$"0x{kvp.Key:X6}"] = baseOut; // key formatting similar to sample
+                export.ClothingBaseEffects[$"0x{kvp.Key:X8}"] = baseOut;
             }
-            foreach (var kvp in table.ClothingSubPalEffects)
+            foreach (var kvp in composed.ClothingSubPalEffects)
             {
                 var subOut = new ClothingSubPalExport { Icon = $"0x{kvp.Value.Icon:X8}" };
                 foreach (var sp in kvp.Value.CloSubPalettes)
@@ -78,22 +109,15 @@ namespace ACViewer.CustomTextures
                 }
                 export.ClothingSubPalEffects[$"{kvp.Key}"] = subOut; // palette template numeric key (decimal)
             }
-
-            // add custom texture overrides if provided
-            if (overrides != null)
-            {
-                foreach (var entry in overrides.Entries)
-                {
-                    export.CustomTextureOverrides.Add(new CustomTextureOverrideExport
-                    {
-                        PartIndex = $"0x{entry.PartIndex:X8}",
-                        OldTexture = $"0x{entry.OldId:X8}",
-                        NewTexture = $"0x{entry.NewId:X8}"
-                    });
-                }
-            }
-
             File.WriteAllText(path, JsonConvert.SerializeObject(export, Formatting.Indented));
+
+            var roundTrip = ImportClothingTable(path);
+            var roundTripErrors = ClothingModService.Validate(roundTrip)
+                .Concat(ClothingModService.Compare(composed, roundTrip))
+                .Distinct()
+                .ToList();
+            if (roundTripErrors.Count > 0)
+                throw new InvalidDataException("Export round-trip failed:\n- " + string.Join("\n- ", roundTripErrors));
         }
 
         // New: Import clothing table JSON into ClothingTable instance
@@ -177,10 +201,40 @@ namespace ACViewer.CustomTextures
                     if (spDef.Ranges.Count > 0)
                         subEffect.CloSubPalettes.Add(spDef);
                 }
-                if (subEffect.CloSubPalettes.Count > 0 || (uint)subIconProp?.GetValue(subEffect) != 0)
+                // Preserve the explicit palette-template key even when the DAT entry is an empty
+                // placeholder. Some clothing tables contain zero-range/zero-icon palette templates;
+                // dropping them here makes export round-trip validation report that the template
+                // disappeared, even though the JSON faithfully represented it.
+                if (!table.ClothingSubPalEffects.ContainsKey(palTemplate))
+                    table.ClothingSubPalEffects.Add(palTemplate, subEffect);
+            }
+
+            // Apply the explicit override section after rebuilding the base table so export/import is symmetric.
+            if (export.CustomTextureOverrides != null)
+            {
+                foreach (var item in export.CustomTextureOverrides)
                 {
-                    if (!table.ClothingSubPalEffects.ContainsKey(palTemplate))
-                        table.ClothingSubPalEffects.Add(palTemplate, subEffect);
+                    try
+                    {
+                        var partIndex = ParseUInt(item.PartIndex);
+                        var oldTexture = ParseUInt(item.OldTexture);
+                        var newTexture = ParseUInt(item.NewTexture);
+                        foreach (var baseEffect in table.ClothingBaseEffects.Values)
+                        {
+                            foreach (var objectEffect in baseEffect.CloObjectEffects.Where(o => o.Index == partIndex))
+                            {
+                                foreach (var textureEffect in objectEffect.CloTextureEffects.Where(t => t.OldTexture == oldTexture))
+                                {
+                                    if (cloTexNewProp != null)
+                                        cloTexNewProp.SetValue(textureEffect, newTexture);
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore only the malformed override; the remainder of the clothing table is still usable.
+                    }
                 }
             }
 

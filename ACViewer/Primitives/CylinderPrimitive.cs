@@ -62,7 +62,7 @@ namespace ACViewer.Primitives
             for (var i = 0; i < tessellation; i++)
             {
                 var next = i < tessellation - 1 ? i + 1 : 0;
-                
+
                 AddIndex(i);
                 AddIndex(next);
                 AddIndex(i + tessellation);

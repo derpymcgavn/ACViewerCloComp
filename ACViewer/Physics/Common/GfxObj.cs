@@ -99,7 +99,7 @@ namespace ACE.Server.Physics.Collision
 
             // get overall drawing sphere from root node if needed
             var drawingSphere = DrawingSphere ?? DrawingBSP.RootNode.Sphere;
-            
+
             foreach (var localSpaceSphere in path.LocalSpaceSphere)
             {
                 var offset = drawingSphere.Center - localSpaceSphere.Center;

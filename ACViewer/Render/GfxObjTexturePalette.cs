@@ -21,7 +21,7 @@ namespace ACViewer.Render
         public bool Equals(GfxObjTexturePalette tpc)
         {
             if (GfxObjId != tpc.GfxObjId) return false;
-            
+
             if (TextureChanges == null && tpc.TextureChanges != null || TextureChanges != null && tpc.TextureChanges == null)
                 return false;
 
@@ -50,7 +50,7 @@ namespace ACViewer.Render
             int hash = 0;
 
             hash = (hash * 397) ^ GfxObjId.GetHashCode();
-            
+
             if (TextureChanges != null)
             {
                 foreach (var kvp in TextureChanges)

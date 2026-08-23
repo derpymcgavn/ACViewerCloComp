@@ -66,7 +66,7 @@ namespace ACViewer.FileTypes
                 var stanceMotion = kvp.Key;
                 var links = kvp.Value;
 
-                if ( (stanceMotion >> 16) != ((uint)stance & 0xFFFF))
+                if ((stanceMotion >> 16) != ((uint)stance & 0xFFFF))
                     continue;
 
                 foreach (var link in links.Keys)

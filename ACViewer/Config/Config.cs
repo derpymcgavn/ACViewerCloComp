@@ -8,7 +8,7 @@
         public Toggles Toggles { get; set; } = new Toggles();
         public MapViewerOptions MapViewer { get; set; } = new MapViewerOptions();
         public BackgroundColors BackgroundColors { get; set; } = new BackgroundColors();
-        public string Theme { get; set; }
+        public string Theme { get; set; } = ThemeManager.DefaultTheme;
         public Mouse Mouse { get; set; } = new Mouse();
         public WindowPos WindowPos { get; set; } = new WindowPos();
     }

@@ -55,12 +55,12 @@ namespace ACViewer
                 for (var y = 0; y < LANDSIZE; y++)
                     land[x, y] = new LandData();
             }
-            
+
             Parallel.For(0, 255 * 255, i =>
             {
                 var block_x = i / 255;
                 var block_y = i % 255;
-                
+
                 var key = (uint)(block_x << 24 | block_y << 16 | 0xFFFF);
                 if (DatManager.CellDat.AllFiles.ContainsKey(key)) // Ensures we either have a full cell, or prevents crashes
                 {
@@ -184,7 +184,7 @@ namespace ACViewer
                     topo[y, x, 2] = emptyColor.B;  // B
                 }
             });
-            
+
             MapImage = new DirectBitmap(LANDSIZE, LANDSIZE);
 
             for (var y = 0; y < LANDSIZE; y++)
@@ -239,7 +239,7 @@ namespace ACViewer
                 for (int y = 0; y < image.Height; y++)
                 {
                     Color clr = GetPixel(image, x, y);
-                    
+
                     // Is the A8R8G8B8 loading colors properly?
                     r += clr.B; // BLUE??
                     g += clr.G;

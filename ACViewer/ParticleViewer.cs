@@ -182,7 +182,7 @@ namespace ACViewer
             GraphicsDevice.Indices = Billboard.IndexBuffer;
 
             var translateWorld = Matrix.CreateFromQuaternion(part.Pos.Frame.Orientation.ToXna()) * Matrix.CreateTranslation(part.Pos.Frame.Origin.ToXna());
-            
+
             // get initial scale from gfxobj vertices
             if (gfxObj.BoundingBox == null)
                 gfxObj.BuildBoundingBox();
@@ -213,7 +213,7 @@ namespace ACViewer
         {
             if (gfxObj.VertexBuffer == null)
                 gfxObj.BuildVertexBuffer();
-            
+
             GraphicsDevice.SetVertexBuffer(gfxObj.VertexBuffer);
 
             var translateWorld = Matrix.CreateScale(part.GfxObjScale.ToXna()) * Matrix.CreateFromQuaternion(part.Pos.Frame.Orientation.ToXna()) * Matrix.CreateTranslation(part.Pos.Frame.Origin.ToXna());
@@ -230,11 +230,11 @@ namespace ACViewer
                         GraphicsDevice.BlendState = BlendState.Additive;
                     else
                         GraphicsDevice.BlendState = BlendState.NonPremultiplied;
-                        //GraphicsDevice.BlendState = BlendState.AlphaBlend;
+                    //GraphicsDevice.BlendState = BlendState.AlphaBlend;
 
                     if (poly.IndexBuffer == null)
                         poly.BuildIndexBuffer();
-                    
+
                     GraphicsDevice.Indices = poly.IndexBuffer;
                     Effect.Parameters["xTextures"].SetValue(poly.Texture);
                     pass.Apply();

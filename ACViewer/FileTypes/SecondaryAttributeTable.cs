@@ -16,7 +16,7 @@ namespace ACViewer.FileTypes
             var treeView = new TreeNode($"{_vitalTable.Id:X8}");
 
             var health = new TreeNode($"Health");
-            health.Items =  new SkillFormula(_vitalTable.MaxHealth.Formula).BuildTree();
+            health.Items = new SkillFormula(_vitalTable.MaxHealth.Formula).BuildTree();
             treeView.Items.Add(health);
 
             var stamina = new TreeNode($"Stamina");

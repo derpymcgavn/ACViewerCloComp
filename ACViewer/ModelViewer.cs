@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -57,6 +57,7 @@ namespace ACViewer
         private VertexBuffer _groundVB;
         private IndexBuffer _groundIB;
         private float _groundZ;
+        private RasterizerState _reflectionRasterizerState;
         private float _groundSize;
         private uint _groundSetupId; // track if setup changed
 
@@ -67,6 +68,9 @@ namespace ACViewer
             if (_groundVB != null && _groundSetupId == id) return;
 
             _groundSetupId = id;
+            _groundVB?.Dispose();
+            _groundIB?.Dispose();
+            _groundVB = null; _groundIB = null;
 
             Vector3 min = new Vector3(float.MaxValue);
             Vector3 max = new Vector3(float.MinValue);
@@ -114,7 +118,7 @@ namespace ACViewer
             };
             _groundVB = new VertexBuffer(GraphicsDevice, typeof(VertexPositionColor), vertsPlane.Length, BufferUsage.WriteOnly);
             _groundVB.SetData(vertsPlane);
-            var indices = new ushort[] { 0,1,2, 2,3,0 };
+            var indices = new ushort[] { 0, 1, 2, 2, 3, 0 };
             _groundIB = new IndexBuffer(GraphicsDevice, IndexElementSize.SixteenBits, indices.Length, BufferUsage.WriteOnly);
             _groundIB.SetData(indices);
 
@@ -126,6 +130,7 @@ namespace ACViewer
                 PreferPerPixelLighting = false,
                 FogEnabled = false
             };
+            _reflectionRasterizerState ??= new RasterizerState { CullMode = Microsoft.Xna.Framework.Graphics.CullMode.None };
         }
 
         private void DrawGroundPlane()
@@ -157,7 +162,7 @@ namespace ACViewer
             var prevDepth = GraphicsDevice.DepthStencilState;
 
             GraphicsDevice.BlendState = BlendState.AlphaBlend;
-            GraphicsDevice.RasterizerState = new RasterizerState { CullMode = Microsoft.Xna.Framework.Graphics.CullMode.None };
+            GraphicsDevice.RasterizerState = _reflectionRasterizerState;
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
             Effect.Parameters["xOpacity"].SetValue(0.45f);
@@ -181,9 +186,8 @@ namespace ACViewer
             Instance = this;
         }
 
-        public void LoadModel(uint id)
+        public void LoadModel(uint id, bool resetCamera = true)
         {
-            TextureCache.Init();
 
             // can be either a gfxobj or setup id
             // if gfxobj, create a simple setup
@@ -193,17 +197,32 @@ namespace ACViewer
             Setup = new SetupInstance(id);
             InitObject(id);
 
-            Camera.InitModel(Setup.Setup.BoundingBox);
+            if (resetCamera)
+                Camera.InitModel(Setup.Setup.BoundingBox);
             EnsureGroundResources();
             ModelType = ModelType.Setup;
         }
 
+        public void LoadModel(uint setupID, ACViewer.Model.ObjDesc objDesc, bool resetCamera = true)
+        {
+            MainWindow.Status.WriteLine($"Loading mob visual {setupID:X8}");
+            GfxObjMode = setupID >> 24 == 0x01;
+            objDesc ??= new ACViewer.Model.ObjDesc(setupID, (ClothingTable)null);
+            objDesc.SetupId = setupID;
+            Setup = new SetupInstance(setupID, objDesc);
+            InitObject(setupID);
+            if (resetCamera)
+                Camera.InitModel(Setup.Setup.BoundingBox);
+            EnsureGroundResources();
+            ModelType = ModelType.Setup;
+        }
+
+
         /// <summary>
         /// Load a model with a ClothingTable
         /// </summary>
-        public void LoadModel(uint setupID, ClothingTable clothingBase, PaletteTemplate paletteTemplate, float shade)
+        public void LoadModel(uint setupID, ClothingTable clothingBase, PaletteTemplate paletteTemplate, float shade, bool resetCamera = true)
         {
-            TextureCache.Init();
 
             // assumed to be in Setup mode for ClothingBase
             GfxObjMode = false;
@@ -216,16 +235,16 @@ namespace ACViewer
             if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
             {
                 InitObject(setupID);
-                Camera.InitModel(Setup.Setup.BoundingBox);
+                if (resetCamera)
+                    Camera.InitModel(Setup.Setup.BoundingBox);
             }
             EnsureGroundResources();
             ModelType = ModelType.Setup;
         }
 
         // added custom palette loader
-        public void LoadModelCustom(uint setupID, ClothingTable clothingBase, List<CloSubPalette> customSubPalettes, float shade)
+        public void LoadModelCustom(uint setupID, ClothingTable clothingBase, List<CloSubPalette> customSubPalettes, float shade, bool resetCamera = true)
         {
-            TextureCache.Init();
             GfxObjMode = false;
 
             // Use the ClothingTable instance directly so runtime texture overrides are honored
@@ -239,7 +258,8 @@ namespace ACViewer
             if (ViewObject == null || ViewObject.PhysicsObj.PartArray.Setup._dat.Id != setupID)
             {
                 InitObject(setupID);
-                Camera.InitModel(Setup.Setup.BoundingBox);
+                if (resetCamera)
+                    Camera.InitModel(Setup.Setup.BoundingBox);
             }
             EnsureGroundResources();
             ModelType = ModelType.Setup;
@@ -267,7 +287,7 @@ namespace ACViewer
             var createParticleHooks = ParticleViewer.Instance.GetCreateParticleHooks(scriptID, 1.0f);
 
             ViewObject.PhysicsObj.destroy_particle_manager();
-            
+
             foreach (var createParticleHook in createParticleHooks)
             {
                 ViewObject.PhysicsObj.create_particle_emitter(createParticleHook.EmitterInfoId, (int)createParticleHook.PartIndex, new AFrame(createParticleHook.Offset), (int)createParticleHook.EmitterId);
@@ -402,4 +422,3 @@ namespace ACViewer
         }
     }
 }
-

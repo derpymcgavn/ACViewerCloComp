@@ -37,10 +37,10 @@ namespace ACE.Server.WorldObjects
             //var wo = checker.CurrentLandblock.GetObject(OwnerId.Value);
 
             //if (wo == null)
-                //return false;
+            //return false;
 
             //if (!(wo is Hook _hook))
-                //return false;
+            //return false;
 
             //hook = _hook;
 

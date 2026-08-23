@@ -27,7 +27,7 @@ namespace ACE.Server.Physics.Animation
         public RawMotionState(RawMotionState _base, RawMotionState rawState)
         {
             InitDefaults();
-            
+
             Actions = _base.Actions;
             CurrentStyle = _base.CurrentStyle;
 

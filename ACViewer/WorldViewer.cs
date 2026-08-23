@@ -26,7 +26,7 @@ namespace ACViewer
         public static Render.Render Render => GameView.Instance.Render;
 
         public Render.Buffer Buffer => Render.Buffer;
-        
+
         public static Camera Camera => GameView.Camera;
 
         public PhysicsEngine Physics { get; set; }
@@ -42,7 +42,7 @@ namespace ACViewer
         public uint SingleBlock { get; set; }
 
         public bool InitPlayerMode { get; set; }
-        
+
         public WorldViewer()
         {
             if (Instance != null && Instance.PlayerMode)
@@ -116,7 +116,7 @@ namespace ACViewer
 
                 if (InitPlayerMode)
                     zBump = 0.0f;
-                
+
                 Camera.InitTeleport(centerBlock, zBump);
                 FileExplorer.Instance.TeleportMode = false;
             }
@@ -147,7 +147,7 @@ namespace ACViewer
             Render.Buffer.ClearBuffer();
             Server.Init();
             TextureCache.Init();
-            
+
             LScape.unload_landblocks_all();
 
             DungeonMode = false;
@@ -370,7 +370,7 @@ namespace ACViewer
             Camera.Locked = true;
 
             PlayerMode = true;
-            
+
             return true;
         }
 

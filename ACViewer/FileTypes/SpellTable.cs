@@ -21,7 +21,7 @@ namespace ACViewer.FileTypes
             var treeView = new TreeNode($"{_spellTable.Id:X8}");
 
             var spells = new TreeNode("Spells");
-            
+
             foreach (var kvp in _spellTable.Spells)
             {
                 var spellNode = new TreeNode($"{kvp.Key}: {kvp.Value.Name}");
@@ -30,7 +30,7 @@ namespace ACViewer.FileTypes
             }
 
             var spellSets = new TreeNode($"Spell Sets");
-            
+
             foreach (var kvp in _spellTable.SpellSet.OrderBy(i => i.Key))
             {
                 var spellSetNode = new TreeNode($"{kvp.Key}: {(EquipmentSet)kvp.Key}");
@@ -39,7 +39,7 @@ namespace ACViewer.FileTypes
             }
 
             treeView.Items = new List<TreeNode>() { spells, spellSets };
-            
+
             return treeView;
         }
     }

@@ -2,10 +2,10 @@
 
 namespace ACViewer.Model
 {
-    public class VertexUV: IEquatable<VertexUV>
+    public class VertexUV : IEquatable<VertexUV>
     {
         public int VertexIdx { get; set; }
-        public int UVIdx { get; set;  }
+        public int UVIdx { get; set; }
 
         public VertexUV(int vertexIdx, int uvIdx)
         {

@@ -4,7 +4,7 @@ using ACE.Entity.Enum;
 
 namespace ACViewer.Entity
 {
-    public class BSPPortal: BSPNode
+    public class BSPPortal : BSPNode
     {
         public ACE.DatLoader.Entity.BSPPortal _bspPortal;
 

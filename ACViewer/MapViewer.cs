@@ -117,7 +117,7 @@ namespace ACViewer
         public void Update(GameTime gameTime)
         {
             if (WorldMap == null) return;
-            
+
             var keyboardState = Keyboard.GetState();
             var mouseState = Mouse.GetState();
 
@@ -133,7 +133,7 @@ namespace ACViewer
                 offset.Y -= Speed;
 
             Pos += offset;
-            
+
             Translate = Matrix.CreateTranslation(Pos.X, Pos.Y, 0);
 
             if (mouseState.Position != PrevMouseState.Position || offset != Vector2.Zero)
@@ -268,7 +268,7 @@ namespace ACViewer
         {
             if (mouseState.LeftButton != ButtonState.Pressed && IsDragging || DragCompleted)
                 return;
-            
+
             var curPos = new Vector2(mouseState.Position.X, mouseState.Position.Y);
 
             if (curPos.X >= 0 && curPos.Y >= 0 && curPos.X < GraphicsDevice.Viewport.Width && curPos.Y < GraphicsDevice.Viewport.Height)
@@ -369,7 +369,7 @@ namespace ACViewer
         {
             if (!ShouldDrawHighlight())
                 return;
-            
+
             spriteBatch.Begin(SpriteSortMode.Immediate, null, SamplerState.PointWrap, null, null, null, BlockTranslate * Scale * Translate);
 
             if (!IsDragging && !DragCompleted)

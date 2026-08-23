@@ -555,7 +555,7 @@ namespace ACViewer
                 {
                     var gfxObjId = setup.Parts[i];
                     if (!gfxObjIdCnts.TryGetValue(gfxObjId, out var cnt)) gfxObjIdCnts[gfxObjId] = 1; else gfxObjIdCnts[gfxObjId] = ++cnt;
-                    var meshNodeName = $"{gfxObjId:X8}" + (gfxObjIdCnts[gfxObjId] > 1 ? $".{gfxObjIdCnts[gfxObjId].ToString().PadLeft(3,'0')}" : string.Empty);
+                    var meshNodeName = $"{gfxObjId:X8}" + (gfxObjIdCnts[gfxObjId] > 1 ? $".{gfxObjIdCnts[gfxObjId].ToString().PadLeft(3, '0')}" : string.Empty);
                     var meshNode = new Assimp.Node(meshNodeName);
                     var transform = Matrix4x4.Identity;
                     if (i < setup.DefaultScale.Count && setup.DefaultScale[i] != Vector3.One)

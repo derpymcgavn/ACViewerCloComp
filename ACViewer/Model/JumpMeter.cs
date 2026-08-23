@@ -8,7 +8,7 @@ namespace ACViewer.Model
     public class JumpMeter
     {
         public static GraphicsDevice GraphicsDevice => GameView.Instance.GraphicsDevice;
-        
+
         public static SpriteBatch spriteBatch => GameView.Instance.SpriteBatch;
 
         public bool IsCharging { get; set; }
@@ -23,7 +23,7 @@ namespace ACViewer.Model
         {
             var colors = new Color[1];
             colors[0] = Color.Black;
-            
+
             TextureBlack = new Texture2D(GraphicsDevice, 1, 1);
             TextureBlack.SetData(colors);
 
@@ -44,7 +44,7 @@ namespace ACViewer.Model
         {
             IsCharging = false;
         }
-        
+
         public void Update()
         {
             if (!IsCharging) return;

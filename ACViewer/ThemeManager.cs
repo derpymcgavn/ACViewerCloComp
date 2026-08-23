@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Windows;
+using AvalonDock.Themes;
 
 namespace ACViewer
 {
     public class ThemeManager
     {
+        public const string DefaultTheme = "Dark Grey";
+
         private static string CurrentTheme { get; set; }
 
         private static Collection<ResourceDictionary> MergedDictionaries => Application.Current.Resources.MergedDictionaries;
@@ -13,13 +16,15 @@ namespace ACViewer
 
         public static void SetTheme(string themeName)
         {
-            themeName ??= "Default";
-            
+            themeName = string.IsNullOrWhiteSpace(themeName) ? DefaultTheme : themeName;
+
             CurrentTheme = themeName.Replace(" ", "");
 
             if (themeName.Equals("Default"))
             {
+                ApplyDockTheme(false);
                 MergedDictionaries.Clear();
+
                 return;
             }
 
@@ -37,12 +42,26 @@ namespace ACViewer
             else
                 MergedDictionaries[1] = controlColors;
 
+
             var controls = new ResourceDictionary { Source = new Uri("/View/Themes/Controls.xaml", UriKind.Relative) };
 
             if (MergedDictionaries.Count < 3)
                 MergedDictionaries.Add(controls);
             else
                 MergedDictionaries[2] = controls;
+
+            ApplyDockTheme(!themeName.Equals("Default", StringComparison.OrdinalIgnoreCase) &&
+                !themeName.Equals("Light", StringComparison.OrdinalIgnoreCase) &&
+                !themeName.Equals("Grey", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void ApplyDockTheme(bool dark)
+        {
+            var dockManager = View.MainWindow.Instance?.DockManager;
+            if (dockManager == null)
+                return;
+
+            dockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
         }
     }
 }

@@ -18,7 +18,7 @@ namespace ACViewer.View
         public static ParticleExplorer Instance { get; set; }
 
         public static MainWindow MainWindow => MainWindow.Instance;
-        
+
         public static GameView GameView => GameView.Instance;
 
         public ParticleExplorer()

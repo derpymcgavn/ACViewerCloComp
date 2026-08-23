@@ -23,7 +23,7 @@ namespace ACViewer.View
         public static Vector3 Origin { get; set; }
         public static Quaternion Orientation { get; set; }
 
-        private static readonly string Filename = @"Data\Locations.txt";
+        private static readonly string Filename = Path.Combine(AppContext.BaseDirectory, "Data", "Locations.txt");
 
         private static List<TeleportRow> TeleportRows { get; set; }
 
@@ -72,11 +72,11 @@ namespace ACViewer.View
         private static void ReadFile()
         {
             TeleportRows = new List<TeleportRow>();
-            
+
             var lines = File.ReadAllLines(Filename);
 
             var sep = new string[] { " | " };
-            
+
             foreach (var line in lines)
             {
                 var pieces = line.Split(sep, StringSplitOptions.None);
@@ -122,9 +122,9 @@ namespace ACViewer.View
         private void Search_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (!InitComplete) return;
-            
+
             ApplyFilters();
-            
+
             PrevSearch = Search.Text;
         }
 
@@ -185,7 +185,7 @@ namespace ACViewer.View
         private void UpdateSummary()
         {
             var suffix = Filtered.Count != 1 ? "s" : "";
-            
+
             Summary.Content = $"Found {Filtered.Count:N0} location{suffix}";
         }
 

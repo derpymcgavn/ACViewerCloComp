@@ -10,7 +10,7 @@ namespace ACE.Server.Managers
     public static class GuidManager
     {
         private static uint nextDynamicGuid = 0x80000000;
-        
+
         /// <summary>
         /// These represent items are generated in the world.
         /// Some of them will be saved to the Shard db.

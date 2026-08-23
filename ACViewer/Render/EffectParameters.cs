@@ -3,10 +3,10 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace ACViewer.Render
 {
-    public class EffectParameters: IEquatable<EffectParameters>
+    public class EffectParameters : IEquatable<EffectParameters>
     {
         //public string Technique;
-        
+
         // per-draw method
         //public Matrix World;
         //public Matrix View;

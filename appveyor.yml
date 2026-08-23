@@ -20,12 +20,12 @@ build:
   verbosity: minimal
 artifacts:
 - path: ACViewer\bin\$(configuration)\net8.0-windows7.0
-  name: ACViewer-v$(appveyor_build_version)-$(configuration)
+  name: DerpACE-Clothing-Studio-v$(appveyor_build_version)-$(configuration)
 deploy:
 - provider: GitHub
   tag: v$(appveyor_build_version)
-  release: ACViewer v$(appveyor_build_version)
-  description: <h1> ACViewer v$(appveyor_build_version) </h1> <blockquote>The following commit is included in this release:</<blockquote> <h1></h1>$(APPVEYOR_REPO_COMMIT_MESSAGE) <p>$(APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED)<h1><h6>automated release build - $(APPVEYOR_REPO_COMMIT_TIMESTAMP)
+  release: DerpACE Clothing Studio v$(appveyor_build_version)
+  description: <h1>DerpACE Clothing Studio v$(appveyor_build_version)</h1> <blockquote>The following commit is included in this release:</<blockquote> <h1></h1>$(APPVEYOR_REPO_COMMIT_MESSAGE) <p>$(APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED)<h1><h6>automated release build - $(APPVEYOR_REPO_COMMIT_TIMESTAMP)
   auth_token:
     secure: lGLpqex+Weod6ZiPw34RwTv999QvoSZ+imTcmYhiJWQL6XkfkVUYcqOO6pJDuAYt
   artifact: /.*\.zip/

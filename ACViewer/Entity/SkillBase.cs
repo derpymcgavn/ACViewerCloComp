@@ -6,12 +6,12 @@ namespace ACViewer.Entity
     {
         public enum SkillCategory
         {
-            Undef  = 0,
+            Undef = 0,
             Combat = 1,
-            Other  = 2,
-            Magic  = 3
+            Other = 2,
+            Magic = 3
         };
-        
+
         public ACE.DatLoader.Entity.SkillBase _skillBase;
 
         public SkillBase(ACE.DatLoader.Entity.SkillBase skillBase)

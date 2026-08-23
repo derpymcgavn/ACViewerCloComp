@@ -64,7 +64,7 @@ namespace ACE.Server.Physics
             if (GfxObj != null && GfxObj.PhysicsBSP != null)
             {
                 transition.SpherePath.CacheLocalSpaceSphere(Pos, GfxObjScale.Z);
-                
+
                 var result = GfxObj.FindObjCollisions(transition, GfxObjScale.Z);
 
                 if (result == TransitionState.OK || !PhysicsObj.IsPicking)
@@ -81,9 +81,9 @@ namespace ACE.Server.Physics
         {
             if (GfxObj == null || GfxObj.DrawingBSP == null)
                 return TransitionState.OK;
-            
+
             transition.SpherePath.CacheLocalSpaceSphere(Pos, GfxObjScale.Z);
-                
+
             var result = GfxObj.FindObjCollisions_Draw(transition, GfxObjScale.Z);
 
             if (result == TransitionState.OK) return result;
@@ -183,7 +183,7 @@ namespace ACE.Server.Physics
         public bool MorphToExistingObject(PhysicsPart template)
         {
             // copy constructor?
-            GfxObj = template.GfxObj;   
+            GfxObj = template.GfxObj;
             GfxObjScale = template.GfxObjScale;
             Pos = template.Pos;
             //DrawPos = template.DrawPos;

@@ -2,7 +2,7 @@
 
 namespace ACViewer.Entity.AnimationHooks
 {
-    public class CreateParticleHook: AnimationHook
+    public class CreateParticleHook : AnimationHook
     {
         public CreateParticleHook(ACE.DatLoader.Entity.AnimationHook hook)
             : base(hook)

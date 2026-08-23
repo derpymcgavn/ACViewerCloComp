@@ -17,7 +17,7 @@ namespace ACE.Server.WorldObjects
         {
 
         }
-        
+
         /// <summary>
         /// A new biota be created taking all of its values from weenie.
         /// </summary>
@@ -393,7 +393,7 @@ namespace ACE.Server.WorldObjects
                 Value -= (item.Value ?? 0);
 
                 //if (forceSave)
-                    //item.SaveBiotaToDatabase();
+                //item.SaveBiotaToDatabase();
 
                 OnRemoveItem(item);
 

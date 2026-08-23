@@ -90,7 +90,7 @@ namespace ACViewer
             {
                 //Camera.Position = Vector3.Zero;
                 //Camera.Dir = Vector3.Normalize(new Vector3(1, 1, 0));
-                
+
                 Camera.Position = new Vector3(11.782367f, 12.763985f, 1.6514041f);
                 Camera.Dir = new Vector3(0.30761153f, -0.94673103f, 0.093334414f);
                 Camera.Up = Vector3.UnitZ;

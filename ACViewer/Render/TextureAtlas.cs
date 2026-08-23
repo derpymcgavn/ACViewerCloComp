@@ -52,7 +52,7 @@ namespace ACViewer.Render
             _Textures = new Texture2D(GraphicsDevice, textureFormat.Width, textureFormat.Height, useMipMaps, textureFormat.SurfaceFormat, Textures.Count);
 
             var firstIdx = -1;
-            
+
             foreach (var kvp in Textures)
             {
                 var stp = kvp.Key;

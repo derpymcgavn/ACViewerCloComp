@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="ACViewer.View.MainMenu"
+<UserControl x:Class="ACViewer.View.MainMenu"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -52,6 +52,11 @@
                 </MenuItem>
                 <MenuItem Header="Palette _Editor" Click="Menu_OpenPaletteEditor" />
                 <MenuItem Header="Texture _Gallery" Click="Menu_OpenTextureGallery" />
+                <MenuItem Header="DAT _Workspace..." Click="DatWorkspace_Click" />
+                <MenuItem Header="_Mob Builder..." Click="MobBuilder_Click" />
+                <MenuItem Header="_Precache Clothing DAT Assets" Click="PrecacheClothingDat_Click" />
+                <Separator />
+                <MenuItem Header="DerpACE Clothing _Admin..." Click="DerpAceClothingAdmin_Click" />
                 <Separator />
                 <MenuItem Header="Import Clothing JSON..." Click="ImportClothingJson_Click" />
                 <MenuItem Header="Export Clothing JSON..." Click="ExportClothingJson_Click" />

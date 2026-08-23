@@ -151,7 +151,7 @@ namespace ACViewer.View
         private void TreeView_CopyAppend(List<string> lines, TreeNode node, int depth = 0)
         {
             var padding = new string(' ', depth * 4);
-            
+
             lines.Add($"{padding}{node.Name}");
 
             foreach (var childNode in node.Items)

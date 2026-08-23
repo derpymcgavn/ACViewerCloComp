@@ -39,7 +39,7 @@ namespace ACViewer.FileTypes
 
             if (_envCell.CellPortals.Count != 0)
             {
-                var cellPortals = new TreeNode("CellPortals:"); 
+                var cellPortals = new TreeNode("CellPortals:");
                 for (var i = 0; i < _envCell.CellPortals.Count; i++)
                 {
                     var cellPortal = new TreeNode($"{i}");

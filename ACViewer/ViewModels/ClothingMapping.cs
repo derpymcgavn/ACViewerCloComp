@@ -64,6 +64,7 @@ namespace ACViewer.ViewModels
         public static ClothingTableVM AddOrUpdate(ClothingEditingSession session, ClothingTable model)
         {
             if (session == null || model == null) return null;
+            session.RegisterModel(model);
             var vm = session.ClothingItems.FirstOrDefault(c => c.Id == model.Id);
             vm = MapToViewModel(model, vm);
             if (!session.ClothingItems.Contains(vm))

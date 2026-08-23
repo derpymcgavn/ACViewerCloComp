@@ -10,7 +10,7 @@ namespace ACViewer.Data
 
     public static class LootArmorList
     {
-        public static Dictionary<uint, LootItem> Loot{ get; set; }
+        public static Dictionary<uint, LootItem> Loot { get; set; }
 
         static LootArmorList()
         {
@@ -19,7 +19,7 @@ namespace ACViewer.Data
 
         public static void Load()
         {
-            var filename = @"Data\LootArmor.txt";
+            var filename = Path.Combine(AppContext.BaseDirectory, "Data", "LootArmor.txt");
 
             var lines = File.ReadAllLines(filename);
 

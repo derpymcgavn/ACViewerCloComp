@@ -27,6 +27,7 @@ namespace ACViewer.CustomPalettes
     public static class RangeParser
     {
         // Existing API (strict)
+        public const uint MaxLogicalGroups = 4096;
         public static List<RangeDef> ParseRanges(string input) => ParseRanges(input, tolerant: false, out _);
 
         // New overload: tolerant parsing for live editing scenarios
@@ -69,6 +70,10 @@ namespace ACViewer.CustomPalettes
             { error = $"Invalid offset in token '{token}'"; return false; }
             if (!uint.TryParse(lenPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var len))
             { error = $"Invalid length in token '{token}'"; return false; }
+            if (len == 0)
+            { error = $"Range '{token}' must have a positive length"; return false; }
+            if (off >= MaxLogicalGroups || len > MaxLogicalGroups || len > MaxLogicalGroups - off)
+            { error = $"Range '{token}' exceeds the supported palette bounds"; return false; }
             range = new RangeDef { Offset = off, Length = len }; return true;
         }
     }
@@ -86,7 +91,7 @@ namespace ACViewer.CustomPalettes
                 foreach (var r in entry.Ranges)
                 {
                     // Convert logical groups to actual color offsets / lengths
-                    var cr = new CloSubPaletteRange { Offset = r.Offset * GroupSize, NumColors = r.Length * GroupSize };
+                    var cr = new CloSubPaletteRange { Offset = checked(r.Offset * GroupSize), NumColors = checked(r.Length * GroupSize) };
                     sub.Ranges.Add(cr);
                 }
                 if (sub.Ranges.Count > 0)

@@ -27,12 +27,12 @@ namespace ACViewer.Utilities
             {"darkblue",0x00008B},{"midnightblue",0x191970},{"darkorange",0xFF8C00},{"aliceblue",0xF0F8FF},{"linen",0xFAF0E6}
         };
 
-        private static List<(string Name,int Color,int R,int G,int B)> _cache;
+        private static List<(string Name, int Color, int R, int G, int B)> _cache;
 
         private static void EnsureCache()
         {
             if (_cache != null) return;
-            _cache = _nameToColor.Select(kv => (kv.Key, kv.Value, (kv.Value>>16)&0xFF, (kv.Value>>8)&0xFF, kv.Value&0xFF)).ToList();
+            _cache = _nameToColor.Select(kv => (kv.Key, kv.Value, (kv.Value >> 16) & 0xFF, (kv.Value >> 8) & 0xFF, kv.Value & 0xFF)).ToList();
         }
 
         public static bool TryGet(string name, out int rgb) => _nameToColor.TryGetValue(name, out rgb);
@@ -44,7 +44,7 @@ namespace ACViewer.Utilities
             string bestName = null; int bestColor = 0; int bestDist = int.MaxValue;
             foreach (var (Name, Color, R, G, B) in _cache)
             {
-                int dr = R - r; int dg = G - g; int db = B - b; int d = dr*dr + dg*dg + db*db;
+                int dr = R - r; int dg = G - g; int db = B - b; int d = dr * dr + dg * dg + db * db;
                 if (d < bestDist) { bestDist = d; bestName = Name; bestColor = Color; }
             }
             return (bestName, $"#{bestColor:X6}", bestDist);
@@ -61,25 +61,25 @@ namespace ACViewer.Utilities
                 int d = Levenshtein(query, name);
                 if (d < best) { best = d; bestName = name; }
             }
-            if (best <= Math.Max(2, query.Length/2)) return bestName; // threshold
+            if (best <= Math.Max(2, query.Length / 2)) return bestName; // threshold
             return null;
         }
 
         private static int Levenshtein(string a, string b)
         {
             int n = a.Length, m = b.Length;
-            var dp = new int[n+1, m+1];
-            for (int i=0;i<=n;i++) dp[i,0]=i;
-            for (int j=0;j<=m;j++) dp[0,j]=j;
-            for (int i=1;i<=n;i++)
+            var dp = new int[n + 1, m + 1];
+            for (int i = 0; i <= n; i++) dp[i, 0] = i;
+            for (int j = 0; j <= m; j++) dp[0, j] = j;
+            for (int i = 1; i <= n; i++)
             {
-                for (int j=1;j<=m;j++)
+                for (int j = 1; j <= m; j++)
                 {
-                    int cost = a[i-1]==b[j-1]?0:1;
-                    dp[i,j] = Math.Min(Math.Min(dp[i-1,j]+1, dp[i,j-1]+1), dp[i-1,j-1]+cost);
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    dp[i, j] = Math.Min(Math.Min(dp[i - 1, j] + 1, dp[i, j - 1] + 1), dp[i - 1, j - 1] + cost);
                 }
             }
-            return dp[n,m];
+            return dp[n, m];
         }
 
         /// <summary>Enumerate all names.</summary>

@@ -24,18 +24,18 @@ namespace ACViewer
     public static class Picker
     {
         private static Viewport Viewport => GameView.Instance.GraphicsDevice.Viewport;
-        
+
         private static Camera Camera => GameView.Camera;
-        
+
         public static void HandleLeftClick(int mouseX, int mouseY)
         {
             //Console.WriteLine($"MouseX: {mouseX}, MouseY: {mouseY}");
-            
+
             // get 3d coordinates at this screen position
 
             // do this by reversing the 3d -> 2d screen transform
             var projectionInverse = Matrix.Invert(Camera.ProjectionMatrix);
-            
+
             var viewMatrix = Matrix.CreateLookAt(Vector3.Zero, Camera.Dir, Camera.Up);  // precision destabilizes @ large position values for this operation, factor out position here
             var viewInverse = Matrix.Invert(viewMatrix);
 
@@ -97,16 +97,16 @@ namespace ACViewer
             if (singleBlock != uint.MaxValue)
             {
                 var landblock = LScape.get_landblock(singleBlock);
-                
+
                 // custom for single landblock IsDungeon
                 if (landblock.IsDungeon)
                 {
                     if (startPos.Landblock != singleBlock >> 16)
                         startPos.Reframe(singleBlock);
-                    
+
                     var adjustCell = AdjustCell.Get(startPos.Landblock);
 
-                    for ( ; i < maxSteps; i++)
+                    for (; i < maxSteps; i++)
                     {
                         var foundCell = adjustCell.GetCell(startPos.Frame.Origin);
 
@@ -140,7 +140,7 @@ namespace ACViewer
 
             var spawned = false;
 
-            for ( ; i < maxSteps; i++)
+            for (; i < maxSteps; i++)
             {
                 if (!spawned)
                 {
@@ -255,7 +255,7 @@ namespace ACViewer
                     if (landblock != null)
                         FileInfo.Instance.SetInfo(new FileTypes.CellLandblock(landblock).BuildTree());
 
-//                    MainWindow.Instance.Status.WriteLine($"Selected {landCell.ID:X8}");
+                    //                    MainWindow.Instance.Status.WriteLine($"Selected {landCell.ID:X8}");
 
                     break;
 
@@ -263,7 +263,7 @@ namespace ACViewer
 
                     // can toggle between single poly and full CellStruct polys
                     // defaulting to full CellStruct polys for now
-                    
+
                     var envCell = PickResult.ObjCell as ACE.Server.Physics.Common.EnvCell;
 
                     transform = envCell.Pos.ToXna();
@@ -271,7 +271,7 @@ namespace ACViewer
                     foreach (var polygon in envCell.CellStructure.Polygons.Values)
                     {
                         var startIdx = i;
-                        
+
                         foreach (var v in polygon.Vertices)
                         {
                             hitVertices.Add(new VertexPositionColor(Vector3.Transform(v.Origin.ToXna(), transform), Color.OrangeRed));
@@ -348,7 +348,7 @@ namespace ACViewer
                         //MainWindow.Instance.Status.WriteLine($"Selected {gfxObjId:X8}");
                     }
                     //else
-                        //Console.WriteLine($"Unknown model ID for object @ {PickResult.PhysicsObj.Position}");
+                    //Console.WriteLine($"Unknown model ID for object @ {PickResult.PhysicsObj.Position}");
 
                     if (PickResult.PhysicsObj.WeenieObj?.WorldObject != null)
                     {
@@ -381,12 +381,12 @@ namespace ACViewer
             var envCell = PickResult?.ObjCell as ACE.Server.Physics.Common.EnvCell;
 
             if (envCell == null) return;
-            
+
             var hitVertices = new List<VertexPositionColor>(HitVertices);
             var hitIndices = new List<int>(HitIndices);
-            
+
             var i = hitVertices.Count;
-            
+
             foreach (var visibleCell in envCell.VisibleCells.Values)
             {
                 var transform = visibleCell.Pos.ToXna();
@@ -424,7 +424,7 @@ namespace ACViewer
         public static void ShowCollision()
         {
             if (PickResult == null) return;
-            
+
             SphereTransforms = null;
             CylinderTransforms = null;
             PhysicsVertices = null;
@@ -532,7 +532,7 @@ namespace ACViewer
         }
 
         private static GraphicsDevice GraphicsDevice => GameView.Instance.GraphicsDevice;
-        
+
         private static Effect Effect => Render.Render.Effect;
 
         public static void DrawHitPoly()
@@ -604,7 +604,7 @@ namespace ACViewer
         {
             if (RenderLinks != null)
                 RenderLinks.Dispose();
-            
+
             RenderLinks = null;
 
             var node = new LinkNode(wo);

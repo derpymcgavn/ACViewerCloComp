@@ -8,7 +8,7 @@ namespace ACViewer
     public class History
     {
         private static readonly int MaxSize = 50;
-        
+
         private readonly List<uint> DID = new List<uint>();
 
         public void Add(uint did)
@@ -16,7 +16,7 @@ namespace ACViewer
             // don't add consecutive duplicates
             if (DID.Count > 0 && DID[DID.Count - 1] == did)
                 return;
-            
+
             DID.Add(did);
 
             if (DID.Count > MaxSize)

@@ -57,7 +57,7 @@ namespace ACViewer.Render
             foreach (var batch in Batches)
                 batch.Draw();
         }
-        
+
         public void DrawWithZFiltering(Func<Vector3, bool> filter)
         {
             Effect.CurrentTechnique = Effect.Techniques["LandscapeSinglePass"];

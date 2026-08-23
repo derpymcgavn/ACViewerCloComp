@@ -88,7 +88,7 @@ namespace ACViewer.Render
 
             AnimatedTextureAtlasChains = new Dictionary<TextureFormat, TextureAtlasChain>();
         }
-        
+
         private bool IsInCurrentZLevel(Vector3 position)
         {
             if (!ConfigManager.Config.MapViewer.EnableZSlicing)
@@ -163,7 +163,7 @@ namespace ACViewer.Render
 
         private void DrawBufferWithZSlicing(Dictionary<TextureSet, InstanceBatch> batches, bool culling = false)
         {
-            var cullMode = WorldViewer.Instance.DungeonMode || culling ? 
+            var cullMode = WorldViewer.Instance.DungeonMode || culling ?
                 CullMode.CullClockwiseFace : CullMode.None;
 
             SetRasterizerState(cullMode);
@@ -400,7 +400,7 @@ namespace ACViewer.Render
         public void BuildTextureAtlases(Dictionary<TextureFormat, TextureAtlasChain> textureAtlasChains = null)
         {
             textureAtlasChains ??= TextureAtlasChains;
-            
+
             foreach (var textureAtlas in textureAtlasChains.Values)
                 textureAtlas.OnCompleted();
         }

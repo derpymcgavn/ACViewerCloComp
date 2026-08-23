@@ -16,7 +16,7 @@ namespace ACViewer.Entity
             var treeNode = new List<TreeNode>();
 
             treeNode.Add(new TreeNode($"PartIndex: {_attackCone.PartIndex}"));
-            
+
             treeNode.Add(new TreeNode($"LeftX: {_attackCone.LeftX}"));
             treeNode.Add(new TreeNode($"LeftY: {_attackCone.LeftY}"));
 

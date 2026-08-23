@@ -22,7 +22,7 @@ namespace ACViewer.FileTypes
                 // skip retired skills, empty data
                 if (string.IsNullOrEmpty(skill.Value.Name))
                     continue;
-                
+
                 var skillNode = new TreeNode($"{skill.Key}: {skill.Value.Name}");
                 skillNode.Items = new SkillBase(skill.Value).BuildTree();
 

@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -22,7 +23,7 @@ using ACViewer.CustomTextures; // added
 using ACViewer.FileTypes; // added
 using System.Threading;
 using System.Threading.Tasks;
-using System.IO; // added
+using ACViewer.Services;
 
 namespace ACViewer.View
 {
@@ -54,6 +55,7 @@ namespace ACViewer.View
         public static bool LoadEncounters { get; set; }
 
         private CancellationTokenSource _datCts;
+        private CancellationTokenSource _precacheCts;
 
         public MainMenu()
         {
@@ -125,28 +127,28 @@ namespace ACViewer.View
             {
                 if (MainWindow.DatInitService.IsInitializing)
                 {
-                    MainWindow.StatusSink?.Post("DAT init already in progress", Services.StatusSeverity.Warning);
+                    MainWindow.StatusSink?.Post("DAT init already in progress", StatusSeverity.Warning);
                     return;
                 }
                 var ok = await MainWindow.DatInitService.InitializeAsync(path, loadCellDat: true, ct);
                 if (ok)
                 {
-                    MainWindow.StatusSink?.Post("DAT initialization complete", Services.StatusSeverity.Success);
+                    MainWindow.StatusSink?.Post("DAT initialization complete", StatusSeverity.Success);
                     if (DatManager.CellDat != null && DatManager.PortalDat != null)
                         GameView.PostInit();
                 }
                 else
                 {
-                    MainWindow.StatusSink?.Post("DAT initialization failed or canceled", Services.StatusSeverity.Error);
+                    MainWindow.StatusSink?.Post("DAT initialization failed or canceled", StatusSeverity.Error);
                 }
             }
             catch (System.OperationCanceledException)
             {
-                MainWindow.StatusSink?.Post("DAT initialization canceled", Services.StatusSeverity.Warning);
+                MainWindow.StatusSink?.Post("DAT initialization canceled", StatusSeverity.Warning);
             }
             catch (System.Exception ex)
             {
-                MainWindow.StatusSink?.Post($"DAT init exception: {ex.Message}", Services.StatusSeverity.Error);
+                MainWindow.StatusSink?.Post($"DAT init exception: {ex.Message}", StatusSeverity.Error);
             }
         }
 
@@ -160,6 +162,51 @@ namespace ACViewer.View
             DatManager.Initialize(di.FullName, true, loadCell);
         }
 
+        private async void PrecacheClothingDat_Click(object sender, RoutedEventArgs e)
+        {
+            if (DatManager.PortalDat == null)
+            {
+                MainWindow.StatusSink?.Post("Load portal DATs before precaching clothing assets.", StatusSeverity.Warning);
+                AfterMenuAction();
+                return;
+            }
+
+            if (DatPrecacheService.IsRunning)
+            {
+                MainWindow.StatusSink?.Post("DAT precache is already running.", StatusSeverity.Warning);
+                AfterMenuAction();
+                return;
+            }
+
+            _precacheCts?.Cancel();
+            _precacheCts = new CancellationTokenSource();
+            var progress = new Progress<DatPrecacheProgress>(p =>
+            {
+                var suffix = p.Total > 0 ? $" ({p.Percent}% - {p.Loaded:N0}/{p.Total:N0})" : string.Empty;
+                MainWindow.Instance?.SetPrecacheProgress(p.Message + suffix, p.Percent, true);
+                MainWindow.StatusSink?.Post(p.Message + suffix);
+            });
+
+            try
+            {
+                MainWindow.Instance?.SetPrecacheProgress("Starting clothing DAT precache...", 0, true);
+                MainWindow.StatusSink?.Post("Starting clothing DAT precache...");
+                await DatPrecacheService.WarmClothingStudioAsync(progress, _precacheCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                MainWindow.StatusSink?.Post("DAT precache canceled.", StatusSeverity.Warning);
+            }
+            catch (Exception ex)
+            {
+                MainWindow.StatusSink?.Post($"DAT precache failed: {ex.Message}", StatusSeverity.Error);
+            }
+            finally
+            {
+                MainWindow.Instance?.SetPrecacheProgress("DAT precache idle", 0, false);
+                AfterMenuAction();
+            }
+        }
         private void Options_Click(object sender, RoutedEventArgs e)
         {
             Options = new Options();
@@ -388,12 +435,15 @@ namespace ACViewer.View
                 AfterMenuAction();
                 return;
             }
-            var save = new SaveFileDialog { Filter = "Clothing JSON (*.json)|*.json", FileName = $"{clothing.Id:X8}.json", Title = "Export Clothing JSON" };
+            var save = new SaveFileDialog { Filter = "CustomClothingBase JSON (*.json)|*.json", FileName = $"{clothing.Id:X8}.json", Title = "Export CustomClothingBase Mod JSON" };
             if (save.ShowDialog() == true)
             {
                 try
                 {
-                    CustomTextureStore.ExportClothingTable(clothing, save.FileName);
+                    if (CustomPaletteDialog.ActiveInstance != null)
+                        CustomPaletteDialog.ActiveInstance.ExportClothingMod(save.FileName);
+                    else
+                        CustomTextureStore.ExportClothingTable(clothing, save.FileName);
                     MainWindow.Instance.AddStatusText($"Exported clothing JSON: {Path.GetFileName(save.FileName)}");
                     CustomTextureStore.WatchClothingJson(save.FileName);
                 }
@@ -405,8 +455,69 @@ namespace ACViewer.View
             AfterMenuAction();
         }
 
+        private void DatWorkspace_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new DatWorkspaceWindow();
+            window.ShowDialog();
+            AfterMenuAction();
+        }
+
+        private void MobBuilder_Click(object sender, RoutedEventArgs e)
+        {
+            ShowMobBuilderDock();
+            AfterMenuAction();
+        }
+
+        private void ShowMobBuilderDock()
+        {
+            var main = MainWindow.Instance;
+            var dock = main?.DockManager?.Layout?.Descendents().OfType<LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == "CustomPaletteDock");
+            if (dock == null)
+            {
+                var window = new MobBuilderWindow { Owner = Window.GetWindow(this) };
+                window.ShowDialog();
+                return;
+            }
+
+            var builder = new MobBuilderWindow(isDocked: true);
+            dock.Title = "Mob Builder";
+            dock.Content = builder.DetachContentForDock();
+            dock.CanHide = true;
+            dock.Show();
+            dock.IsActive = true;
+            main.Title = "DerpACE Mob Builder";
+            main.AddStatusText("Opened Mob Builder in the main editor dock.");
+        }
+
+        private void ShowClothingStudioDock()
+        {
+            var main = MainWindow.Instance;
+            var dock = main?.DockManager?.Layout?.Descendents().OfType<LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == "CustomPaletteDock");
+            if (dock == null) return;
+
+            var editor = CustomPaletteDialog.ActiveInstance;
+            if (editor == null || !ReferenceEquals(dock.Content, editor))
+                editor = new CustomPaletteDialog();
+            editor.SetClothingStudioMode();
+            dock.Title = "Clothing Studio";
+            dock.Content = editor;
+            dock.Show();
+            dock.IsActive = true;
+            main.Title = "DerpACE Clothing Studio - CloComp";
+        }
+
+        private void DerpAceClothingAdmin_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new DerpAceAdminWindow();
+            window.ShowDialog();
+            AfterMenuAction();
+        }
+
         private void Menu_OpenPaletteEditor(object sender, RoutedEventArgs e)
         {
+            ShowClothingStudioDock();
             ClothingTableList.Instance?.OpenPaletteAndTextureEditors();
             AfterMenuAction();
         }
@@ -450,8 +561,10 @@ namespace ACViewer.View
 
         private void Menu_OpenTextureGallery(object sender, RoutedEventArgs e)
         {
-            if (DatManager.PortalDat == null) { AfterMenuAction(); return; }
-            GameView.ViewMode = ACViewer.Enum.ViewMode.TextureGallery;
+            ShowClothingStudioDock();
+            ClothingTableList.Instance?.OpenPaletteAndTextureEditors();
+            CustomPaletteDialog.ActiveInstance?.SelectTextureTab();
+            MainWindow.Instance?.AddStatusText("Opened the Clothing Studio texture browser.");
             AfterMenuAction();
         }
 

@@ -10,17 +10,17 @@ using ACViewer.Enum;
 
 namespace ACE.Server.Physics.Common
 {
-    public class LandCell: SortCell
+    public class LandCell : SortCell
     {
         public List<Polygon> Polygons;
         public bool InView;
 
-        public LandCell(): base()
+        public LandCell() : base()
         {
             Init();
         }
 
-        public LandCell(uint cellID): base(cellID)
+        public LandCell(uint cellID) : base(cellID)
         {
             Init();
         }

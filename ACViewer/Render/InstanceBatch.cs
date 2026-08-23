@@ -18,7 +18,7 @@ namespace ACViewer.Render
         public VertexBuffer InstanceBuffer { get; set; }
 
         public R_Environment R_Environment { get; set; }
-        
+
         public void DrawFiltered(Func<Vector3, bool> filter)
         {
             // Store original instances
@@ -71,7 +71,7 @@ namespace ACViewer.Render
                     // only use this hack for envcells / possibly buildings?
                     // bugged path: 000102BF-> 0D000425-> 080000DF
                     if (polygon._polygon.Stippling == StipplingType.NoPos) continue;
-                    
+
                     var surfaceIdx = polygon._polygon.PosSurface;
                     var surfaceID = envCell.EnvCell._envCell.Surfaces[surfaceIdx];
 

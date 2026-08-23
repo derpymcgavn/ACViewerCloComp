@@ -13,7 +13,7 @@ namespace ACViewer.Render
         public static GraphicsDevice GraphicsDevice => GameView.Instance.GraphicsDevice;
 
         public static Effect Effect => Render.Effect;
-        
+
         public LinkNode Head { get; set; }
 
         public LinkNode Selected { get; set; }
@@ -37,7 +37,7 @@ namespace ACViewer.Render
         public RenderLinks(LinkNode node)
         {
             Selected = node;
-            
+
             Head = node.GetHeadNode();
 
             BuildVertices();
@@ -47,7 +47,7 @@ namespace ACViewer.Render
         {
             LineVerts = new List<VertexPositionColor>();
             ArrowVerts = new List<VertexPositionColor>();
-            
+
             AddChildTree(Head);
 
             if (LineVerts != null && LineVerts.Count > 0)
@@ -84,7 +84,7 @@ namespace ACViewer.Render
             RadiusVerts = new List<VertexPositionColor>();
 
             var stepSize = (float)Math.PI * 2 / RadiusPoints;
-            
+
             for (var i = 0; i < RadiusPoints; i++)
             {
                 var q = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, i * stepSize);
@@ -115,12 +115,12 @@ namespace ACViewer.Render
         public bool AddChildTree(LinkNode node)
         {
             if (node.Children == null || node.WorldObject.PhysicsObj == null) return false;
-            
+
             foreach (var child in node.Children)
             {
                 // debug me: click on the pathwarden chest in yaraq
                 if (child.WorldObject.PhysicsObj == null) continue;
-                
+
                 var parentLoc = node.WorldObject.PhysicsObj.Position.GetWorldPos();
                 var childLoc = child.WorldObject.PhysicsObj.Position.GetWorldPos();
 
@@ -134,7 +134,7 @@ namespace ACViewer.Render
 
                 //var parentRad = node.WorldObject.PhysicsObj.GetPhysicsRadius();
                 //parentLoc -= childToParentDir * parentRad * 0.67f;
-                
+
                 if (Picker.PickResult.PhysicsObj == child.WorldObject.PhysicsObj)
                 {
                     var childRad = child.WorldObject.PhysicsObj.GetPhysicsRadius();

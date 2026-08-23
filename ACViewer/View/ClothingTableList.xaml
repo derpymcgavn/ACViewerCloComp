@@ -1,8 +1,22 @@
-﻿<UserControl x:Class="ACViewer.View.ClothingTableList"
+<UserControl x:Class="ACViewer.View.ClothingTableList"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:ACViewer.ViewModels"
              xmlns:local="clr-namespace:ACViewer.View">
+    <UserControl.Resources>
+        <HierarchicalDataTemplate DataType="{x:Type vm:BaseEffectVM}" ItemsSource="{Binding SubPaletteEffects}">
+            <TextBlock Text="{Binding DisplayName}" />
+        </HierarchicalDataTemplate>
+        <HierarchicalDataTemplate DataType="{x:Type vm:SubPaletteEffectVM}" ItemsSource="{Binding CloSubPalettes}">
+            <TextBlock Text="{Binding DisplayName}" />
+        </HierarchicalDataTemplate>
+        <HierarchicalDataTemplate DataType="{x:Type vm:CloSubPaletteVM}" ItemsSource="{Binding Ranges}">
+            <TextBlock Text="{Binding DisplayName}" />
+        </HierarchicalDataTemplate>
+        <DataTemplate DataType="{x:Type vm:RangeVM}">
+            <TextBlock Text="{Binding DisplayName}" />
+        </DataTemplate>
+    </UserControl.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" MinWidth="210" />
@@ -14,15 +28,12 @@
         </Grid.RowDefinitions>
 
         <!-- Toolbar -->
-        <DockPanel Grid.ColumnSpan="1" LastChildFill="False" Margin="2,2,2,4">
+        <DockPanel Grid.ColumnSpan="1" Margin="2,2,2,4">
             <WrapPanel x:Name="ToolbarWrap" Orientation="Horizontal" ItemHeight="24" ItemWidth="Auto">
                 <Button Margin="0,0,4,4" Command="{Binding NewClothingCommand}"><TextBlock Text="New"/></Button>
                 <Button Margin="0,0,4,4" Command="{Binding CloneClothingCommand}"><TextBlock Text="Clone"/></Button>
+                <Button Margin="0,0,4,4" Click="AssignClothingId_Click" ToolTip="Assign a suggested free ClothingMod ID or intentionally override an existing ID"><TextBlock Text="Assign ID"/></Button>
                 <Button Margin="0,0,4,4" Command="{Binding DeleteClothingCommand}"><TextBlock Text="Delete"/></Button>
-                <Separator Width="1" Margin="0,0,4,4" />
-                <Button Margin="0,0,4,4" Command="{Binding AddSubPaletteEffectCommand}"><TextBlock Text="Add SubEffect"/></Button>
-                <Button Margin="0,0,4,4" Command="{Binding AddCloSubPaletteCommand}"><TextBlock Text="Add SubPalette"/></Button>
-                <Separator Width="1" Margin="0,0,4,4" />
                 <Button Margin="0,0,4,4" Width="34" Command="{Binding IncreaseScaleCommand}"><TextBlock Text="A+"/></Button>
                 <Button Margin="0,0,4,4" Width="34" Command="{Binding DecreaseScaleCommand}"><TextBlock Text="A-"/></Button>
             </WrapPanel>
@@ -30,9 +41,36 @@
 
         <!-- Main content (previously left pane only). The removed right editor is now provided exclusively by popup dialog. -->
         <ScrollViewer Grid.Row="1" Grid.Column="0" Margin="4,0,4,4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Width="200">
-                <Expander IsExpanded="True" Header="Clothing Items" Margin="0,0,0,4">
-                    <ListBox ItemsSource="{Binding ClothingItems}" SelectedItem="{Binding SelectedClothing}" DisplayMemberPath="DisplayName" Height="150" />
+            <StackPanel HorizontalAlignment="Stretch">
+                <Expander IsExpanded="True" Header="Studio Workflow" Margin="0,0,0,4">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Workflow.Project.Summary}" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6" />
+                        <ItemsControl ItemsSource="{Binding Workflow.Issues}" Margin="0,0,0,6">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap" FontSize="10" Opacity="0.82" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>                        <ItemsControl ItemsSource="{Binding Workflow.Steps}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox IsChecked="{Binding IsComplete}" IsHitTestVisible="False" Focusable="False" VerticalAlignment="Top" Margin="0,1,6,0" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Hint}" Opacity="0.72" FontSize="10" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Expander>                <Expander IsExpanded="True" Header="Working Clothing Mods" Margin="0,0,0,4">
+                    <ListBox ItemsSource="{Binding ClothingItems}" SelectedItem="{Binding SelectedClothing}" DisplayMemberPath="DisplayName" Height="150" SelectionChanged="ClothingItems_SelectionChanged" />
                 </Expander>
                 <Expander IsExpanded="True" Header="Setup &amp; Palettes" Margin="0,0,0,4">
                     <StackPanel>
@@ -49,6 +87,6 @@
             </StackPanel>
         </ScrollViewer>
 
-        <TextBlock Grid.Row="2" Grid.ColumnSpan="1" Margin="4" Foreground="Gray" FontSize="10" Text="Palette editing opens in its own window."/>
+        <TextBlock Grid.Row="2" Grid.ColumnSpan="1" Margin="4" Foreground="Gray" FontSize="10" Text="Palette and texture editing opens in the docked Custom Palette panel."/>
     </Grid>
 </UserControl>

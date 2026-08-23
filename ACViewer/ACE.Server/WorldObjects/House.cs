@@ -18,7 +18,7 @@ namespace ACE.Server.WorldObjects
         /// 0 = closed, 1 = open
         /// </summary>
         public bool OpenStatus { get => OpenToEveryone; set => OpenToEveryone = value; }
-        
+
         /// <summary>
         /// For linking mansions
         /// </summary>
@@ -88,7 +88,7 @@ namespace ACE.Server.WorldObjects
             //wo.HouseOwnerName = house.HouseOwnerName;
 
             //if (house.HouseOwner != null && wo is SlumLord)
-                //wo.CurrentMotionState = new Motion(MotionStance.Invalid, MotionCommand.On);
+            //wo.CurrentMotionState = new Motion(MotionStance.Invalid, MotionCommand.On);
 
             // the inventory items haven't been loaded yet
             if (wo is Hook hook)

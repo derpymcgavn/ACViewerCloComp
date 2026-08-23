@@ -59,7 +59,7 @@ namespace ACViewer.Services
                 _dispatcher.BeginInvoke(new System.Action(() =>
                 {
                     if (MainWindow.Instance == null) return;
-                    foreach (var b in batch.OrderBy(b=>b.ts))
+                    foreach (var b in batch.OrderBy(b => b.ts))
                         MainWindow.Instance.AddStatusText(b.msg);
                 }), DispatcherPriority.Background);
             }

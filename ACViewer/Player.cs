@@ -25,7 +25,7 @@ namespace ACViewer
         public static Camera Camera => GameView.Camera;
 
         public static uint NextPlayerGuid = 0x50000001;
-        
+
         public ACE.Server.WorldObjects.Player WorldObject { get; set; }
 
         public PhysicsObj PhysicsObj => WorldObject.PhysicsObj;
@@ -367,7 +367,7 @@ namespace ACViewer
                     JumpMeter.Start();
 
                     var minterp = PhysicsObj.get_minterp();
-                    
+
                     if (PhysicsObj.TransientState.HasFlag(TransientStateFlags.Contact | TransientStateFlags.OnWalkable) && minterp.InterpretedState.ForwardCommand == (uint)MotionCommand.Ready &&
                         minterp.InterpretedState.SideStepCommand == 0 && minterp.InterpretedState.TurnCommand == 0)
                     {
@@ -390,7 +390,7 @@ namespace ACViewer
 
                     var jumpVelocity = minterp.get_leave_ground_velocity();
                     jumpVelocity.Z = jumpVelocityZ;
-                    
+
                     // perform physics jump
                     PhysicsObj.TransientState &= ~(TransientStateFlags.Contact | TransientStateFlags.WaterContact);
                     PhysicsObj.calc_acceleration();
@@ -410,11 +410,11 @@ namespace ACViewer
 
             minterp.RawState = new RawMotionState(minterp.RawState, RawMotionState);
         }
-        
+
         public void ApplyRawState()
         {
             BuildRawState();
-            
+
             var minterp = PhysicsObj.get_minterp();
 
             var allowJump = minterp.motion_allows_jump(minterp.InterpretedState.ForwardCommand) == WeenieError.None;
@@ -496,7 +496,7 @@ namespace ACViewer
         public void DoMotion(MotionCommand motionCommand, float speed = 1.0f, bool start = true)
         {
             var keyboardState = Keyboard.GetState();
-            
+
             var holdKey = keyboardState.IsKeyDown(Keys.LeftShift) ? HoldKey.None : HoldKey.Run;
 
             var mvp = new MovementParameters();

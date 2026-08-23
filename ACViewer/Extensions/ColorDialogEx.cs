@@ -8,7 +8,7 @@ namespace ACViewer.Extensions
     {
         #region private const
         //Windows Message Constants
-        private const int WM_INITDIALOG   = 0x0110;
+        private const int WM_INITDIALOG = 0x0110;
         private const int WM_CTLCOLOREDIT = 0x0133;
         private const int WM_CTLCOLORSTATIC = 0x0138;
 

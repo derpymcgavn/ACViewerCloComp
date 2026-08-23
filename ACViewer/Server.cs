@@ -46,18 +46,18 @@ namespace ACViewer
             InstancesLoaded = false;
             EncountersLoaded = false;
         }
-        
+
         public static void LoadInstances()
         {
             Initting = true;
             MainWindow.Instance.SuppressStatusText = true;
-            
+
             SetDatabaseConfig();
 
             Instances = new List<WorldObject>();
 
             var timer = Stopwatch.StartNew();
-            
+
             // get the list of loaded landblocks
             foreach (var lbid in LScape.Landblocks.Keys)
             {
@@ -220,7 +220,7 @@ namespace ACViewer
                 Console.WriteLine($"Found {encounters.Count:N0} encounters for {lbid:X8}");
 
                 var landblock = LScape.get_landblock(lbid);
-                
+
                 foreach (var encounter in encounters)
                 {
                     var wo = WorldObjectFactory.CreateNewWorldObject(encounter.WeenieClassId);
@@ -246,7 +246,7 @@ namespace ACViewer
                         continue;
 
                     var success = wo.AddPhysicsObj(pos);
-                    
+
                     if (!success)
                     {
                         Console.WriteLine($"LoadEncounters({lbid:X8}).AddPhysicsObj({wo.Name}, {pos}) - failed to spawn");
@@ -397,17 +397,17 @@ namespace ACViewer
         }
 
         public static GeneratorTickMode GeneratorTickMode { get; set; }
-        
+
         public static void TickGenerators(GeneratorTickMode generatorTickMode)
         {
             if (UpdateObjs == null) return;
-            
+
             GeneratorTickMode = generatorTickMode;
-            
+
             for (var i = 0; i < UpdateObjs.Count; i++)
             {
                 var updateObj = UpdateObjs[i];
-                
+
                 if (!updateObj.IsGenerator) continue;
 
                 updateObj.Generator_Update();
@@ -422,7 +422,7 @@ namespace ACViewer
         {
             // called by generators
             wo.InitPhysicsObj();
-            
+
             var success = wo.AddPhysicsObj(new Position(wo.Location));
 
             if (success)

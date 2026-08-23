@@ -7,7 +7,7 @@ namespace ACViewer.FileTypes
     public class Surface
     {
         public ACE.DatLoader.FileTypes.Surface _surface;
-        
+
         /// <summary>
         /// Used to store a NewTextureId when replaced via Clothing Table.
         /// </summary>
@@ -44,20 +44,20 @@ namespace ACViewer.FileTypes
 
             //if (_surface.Translucency != 0.0f)
             //{
-                var translucency = new TreeNode($"Translucency: {_surface.Translucency}");
-                treeView.Items.Add(translucency);
+            var translucency = new TreeNode($"Translucency: {_surface.Translucency}");
+            treeView.Items.Add(translucency);
             //}
 
             //if (_surface.Luminosity != 0.0f)
             //{
-                var luminosity = new TreeNode($"Luminosity: {_surface.Luminosity}");
-                treeView.Items.Add(luminosity);
+            var luminosity = new TreeNode($"Luminosity: {_surface.Luminosity}");
+            treeView.Items.Add(luminosity);
             //}
 
             //if (_surface.Diffuse != 1.0f)
             //{
-                var diffuse = new TreeNode($"Diffuse: {_surface.Diffuse}");
-                treeView.Items.Add(diffuse);
+            var diffuse = new TreeNode($"Diffuse: {_surface.Diffuse}");
+            treeView.Items.Add(diffuse);
             //}
 
             return treeView;

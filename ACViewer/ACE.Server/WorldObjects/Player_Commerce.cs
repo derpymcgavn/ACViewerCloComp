@@ -17,7 +17,7 @@ namespace ACE.Server.WorldObjects
             CoinValue = coins;
 
             //if (sendUpdateMessageIfChanged)
-                //Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(this, PropertyInt.CoinValue, CoinValue ?? 0));
+            //Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(this, PropertyInt.CoinValue, CoinValue ?? 0));
         }
     }
 }

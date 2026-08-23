@@ -92,7 +92,7 @@ namespace ACViewer.Model
         {
             var lbx = landblock.ID >> 24;
             var lby = landblock.ID >> 16 & 0xFF;
-            
+
             // get the global tile offsets
             var x = (lbx * 8) + cellX;
             var y = (lby * 8) + cellY;

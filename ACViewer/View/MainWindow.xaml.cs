@@ -1,13 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using AvalonDock.Layout;
 using AvalonDock.Layout.Serialization;
 using ACViewer.Config;
 using ACViewer.CustomTextures;
@@ -26,13 +29,14 @@ namespace ACViewer.View
         internal static ACViewer.Services.IAssetRepository AssetRepository { get; set; } // global asset repo
         internal static ACViewer.Services.DatInitializationService DatInitService { get; private set; }
         private static Config.Config Config => ConfigManager.Config;
-        private const string DockLayoutFile = "DockLayout.config";
+        private static string DockLayoutFile => Path.Combine(ConfigManager.AppDataDirectory, "DockLayout.clothing-studio-v2.config");
 
         // JSON editor state
         private string _lastJsonSnapshot = string.Empty;
         private bool _autoApply;
-        private bool _suppressCaretUpdate;
         private Regex _lastSearchRegex;
+        private CancellationTokenSource _autoApplyCts;
+        private readonly SemaphoreSlim _jsonApplyGate = new(1, 1);
 
         // Status batching
         private readonly List<string> _statusLines = new();
@@ -81,6 +85,9 @@ namespace ACViewer.View
         {
             ConfigManager.LoadConfig();
 
+            Config.Theme = string.IsNullOrWhiteSpace(Config.Theme) ? ThemeManager.DefaultTheme : Config.Theme;
+            ThemeManager.SetTheme(Config.Theme);
+
             if (Config.AutomaticallyLoadDATsOnStartup)
             {
                 if (MainMenu.Instance != null)
@@ -100,7 +107,6 @@ namespace ACViewer.View
             if (t.ShowParticles) MainMenu.ToggleParticles(false);
             if (t.LoadInstances) MainMenu.ToggleInstances(false);
             if (t.LoadEncounters) MainMenu.ToggleEncounters(false);
-            if (Config.Theme != null) ThemeManager.SetTheme(Config.Theme);
         }
 
         private void TryLoadDockLayout()
@@ -110,6 +116,18 @@ namespace ACViewer.View
                 if (!File.Exists(DockLayoutFile)) return;
                 var serializer = new XmlLayoutSerializer(DockManager);
                 serializer.Deserialize(DockLayoutFile);
+
+                // Keep tool windows usable after resizing or restoring on a smaller monitor.
+                foreach (var pane in DockManager.Layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorablePane>())
+                {
+                    if (!pane.DockWidth.IsAbsolute) continue;
+                    var containsExplorer = pane.Children.Any(item => item.ContentId == "Explorer");
+                    var containsStudio = pane.Children.Any(item => item.ContentId == "CustomPaletteDock");
+                    if (containsExplorer && (pane.DockWidth.Value < 260 || pane.DockWidth.Value > 520))
+                        pane.DockWidth = new GridLength(340);
+                    else if (containsStudio && pane.DockWidth.Value < 520)
+                        pane.DockWidth = new GridLength(620);
+                }
             }
             catch { /* ignore layout load errors */ }
         }
@@ -169,6 +187,25 @@ namespace ACViewer.View
             _lastStatusFlush = DateTime.Now;
         }
 
+        public void SetPrecacheProgress(string message, int percent, bool isVisible)
+        {
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    _ = Dispatcher.BeginInvoke(new Action(() => SetPrecacheProgress(message, percent, isVisible)), DispatcherPriority.Background);
+                    return;
+                }
+
+                if (PrecachePanel == null || PrecacheProgressBar == null || PrecacheProgressText == null)
+                    return;
+
+                PrecachePanel.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+                PrecacheProgressBar.Value = Math.Clamp(percent, 0, 100);
+                PrecacheProgressText.Text = message ?? string.Empty;
+            }
+            catch { }
+        }
         public async void AddStatusText(string line)
         {
             // kept internal usage pattern for sink
@@ -176,7 +213,7 @@ namespace ACViewer.View
             {
                 if (!Dispatcher.CheckAccess())
                 {
-                    Dispatcher.BeginInvoke(new Action(() => AddStatusText(line)), DispatcherPriority.Background);
+                    _ = Dispatcher.BeginInvoke(new Action(() => AddStatusText(line)), DispatcherPriority.Background);
                     return;
                 }
                 if (SuppressStatusText) return;
@@ -191,7 +228,7 @@ namespace ACViewer.View
                     await Task.Delay(StatusMinInterval);
                     _pendingStatusFlush = false;
                     if (!Dispatcher.CheckAccess())
-                        Dispatcher.BeginInvoke(new Action(FlushStatus), DispatcherPriority.Background);
+                        _ = Dispatcher.BeginInvoke(new Action(FlushStatus), DispatcherPriority.Background);
                     else
                         FlushStatus();
                 }
@@ -218,15 +255,16 @@ namespace ACViewer.View
             await RefreshJsonFromModelAsync();
         }
 
-        internal async Task RefreshJsonFromModelAsync(bool silent=false)
+        internal async Task RefreshJsonFromModelAsync(bool silent = false)
         {
             try
             {
                 var clothing = ClothingTableList.CurrentClothingItem;
-                if (clothing == null) { if(!silent) AddStatusText("No clothing selected for JSON export"); return; }
+                if (clothing == null) { if (!silent) AddStatusText("No clothing selected for JSON export"); return; }
                 var temp = System.IO.Path.GetTempFileName();
                 string jsonText = null;
-                await Task.Run(() => {
+                await Task.Run(() =>
+                {
                     CustomTextureStore.ExportClothingTable(clothing, temp);
                     jsonText = System.IO.File.ReadAllText(temp);
                 });
@@ -235,43 +273,48 @@ namespace ACViewer.View
                 _lastJsonSnapshot = JsonEditorText.Text;
                 UpdateJsonMetrics();
                 UpdateDiffStat();
-                if(!silent) AddStatusText("JSON refreshed from current clothing table");
+                if (!silent) AddStatusText("JSON refreshed from current clothing table");
             }
-            catch (Exception ex) { if(!silent) AddStatusText("Refresh failed: " + ex.Message); }
+            catch (Exception ex) { if (!silent) AddStatusText("Refresh failed: " + ex.Message); }
         }
 
         private async void ApplyJson_Click(object sender, RoutedEventArgs e) => await ApplyJsonInternalAsync();
 
-        private async Task ApplyJsonInternalAsync()
+        private async Task ApplyJsonInternalAsync(CancellationToken cancellationToken = default)
         {
+            string temp = null;
+            await _jsonApplyGate.WaitAsync(cancellationToken);
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var raw = JsonEditorText.Text;
 
-                // Validate syntax on background thread
                 await Task.Run(() =>
                 {
-                    using (var reader = new JsonTextReader(new System.IO.StringReader(raw))) { while (reader.Read()) { } }
-                });
+                    using var reader = new JsonTextReader(new System.IO.StringReader(raw));
+                    while (reader.Read()) { }
+                }, cancellationToken);
 
-                var temp = System.IO.Path.GetTempFileName();
-                await Task.Run(() => System.IO.File.WriteAllText(temp, raw));
-
-                ACE.DatLoader.FileTypes.ClothingTable imported = null;
-                await Task.Run(() => { imported = CustomTextureStore.ImportClothingTable(temp); });
-                System.IO.File.Delete(temp);
+                temp = System.IO.Path.GetTempFileName();
+                await Task.Run(() => System.IO.File.WriteAllText(temp, raw), cancellationToken);
+                var imported = await Task.Run(() => CustomTextureStore.ImportClothingTable(temp), cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (imported == null) { AddStatusText("Apply failed: parsed null"); return; }
-
-                // Marshal update to UI thread
-                Dispatcher.Invoke(() => ClothingTableList.Instance?.OnClickClothingBase(imported, imported.Id, null, null));
+                ClothingTableList.Instance?.OnClickClothingBase(imported, imported.Id, null, null);
 
                 _lastJsonSnapshot = raw;
                 UpdateJsonMetrics();
                 UpdateDiffStat();
                 AddStatusText("Applied JSON to clothing table.");
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex) { AddStatusText("Apply failed: " + ex.Message); JsonValidationStatus.Text = "Invalid"; }
+            finally
+            {
+                if (temp != null) { try { System.IO.File.Delete(temp); } catch { } }
+                _jsonApplyGate.Release();
+            }
         }
         #endregion
 
@@ -393,9 +436,21 @@ namespace ACViewer.View
             UpdateDiffStat();
             if (_autoApply && AutoApplyJson?.IsChecked == true)
             {
-                // fire-and-forget async apply to avoid blocking UI on heavy import
-                _ = ApplyJsonInternalAsync();
+                _autoApplyCts?.Cancel();
+                _autoApplyCts?.Dispose();
+                _autoApplyCts = new CancellationTokenSource();
+                _ = DebouncedAutoApplyAsync(_autoApplyCts.Token);
             }
+        }
+
+        private async Task DebouncedAutoApplyAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(600, cancellationToken);
+                await ApplyJsonInternalAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) { }
         }
 
         private void UpdateJsonMetrics()
@@ -406,7 +461,6 @@ namespace ACViewer.View
 
         private void UpdateCaretStatus()
         {
-            if (_suppressCaretUpdate) return;
             try
             {
                 int idx = JsonEditorText.CaretIndex;
@@ -423,7 +477,16 @@ namespace ACViewer.View
         #endregion
 
         #region Toggles
-        private void ToggleAutoApply_Checked(object sender, RoutedEventArgs e) => _autoApply = AutoApplyJson.IsChecked == true;
+        private void ToggleAutoApply_Checked(object sender, RoutedEventArgs e)
+        {
+            _autoApply = AutoApplyJson.IsChecked == true;
+            if (!_autoApply)
+            {
+                _autoApplyCts?.Cancel();
+                _autoApplyCts?.Dispose();
+                _autoApplyCts = null;
+            }
+        }
         private void WrapJson_Checked(object sender, RoutedEventArgs e)
         {
             if (JsonEditorText == null) return; // not yet created
@@ -445,7 +508,7 @@ namespace ACViewer.View
                 await Task.Delay(RealtimeSyncMinInterval);
                 _pendingRealtimeSync = false;
             }
-            await RefreshJsonFromModelAsync(silent:true);
+            await RefreshJsonFromModelAsync(silent: true);
             _lastRealtimeSync = DateTime.UtcNow;
         }
     }

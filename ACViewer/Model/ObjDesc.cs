@@ -23,7 +23,7 @@ namespace ACViewer.Model
         public ObjDesc(uint setupID, uint clothingTableID, PaletteTemplate paletteTemplate = PaletteTemplate.Undef, float shade = 0.0f)
         {
             SetupId = setupID;
-            
+
             Add(clothingTableID, paletteTemplate, shade);
         }
 
@@ -174,7 +174,7 @@ namespace ACViewer.Model
         {
             if (PartChanges == null)
                 PartChanges = new Dictionary<uint, PartChange>();
-            
+
             if (!PartChanges.TryGetValue(partIdx, out var partChange))
             {
                 if (newGfxObjId == null)

@@ -59,7 +59,7 @@ namespace ACViewer.Render
 
                     var spawnedNode = new LinkNode(spawned);
                     spawnedNode.Parent = this;
-                    
+
                     AddChild(spawnedNode);
 
                     spawnedNode.AddChildTree_Generator();   // recurse

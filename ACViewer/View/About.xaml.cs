@@ -10,8 +10,8 @@ namespace ACViewer.View
     /// </summary>
     public partial class About : Window
     {
-        public string RunText => "ACViewer - build " + GetBuildDate(Assembly.GetExecutingAssembly()).ToString("yyyy.MM.dd");
-       
+        public string RunText => "DerpACE Clothing Studio (CloComp) - build " + GetBuildDate(Assembly.GetExecutingAssembly()).ToString("yyyy.MM.dd");
+
         public About()
         {
             InitializeComponent();
@@ -23,7 +23,7 @@ namespace ACViewer.View
 
         private void OK_Click(object sender, RoutedEventArgs e)
         {
-            Close();   
+            Close();
         }
 
         // https://www.meziantou.net/getting-the-date-of-build-of-a-dotnet-assembly-at-runtime.htm

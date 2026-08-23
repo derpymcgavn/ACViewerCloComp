@@ -365,7 +365,7 @@ namespace ACE.Server.Physics
                     Parts[i].PhysicsObj = Owner;
                     Parts[i].PhysObjIndex = i;
                 }
-                
+
                 if (Setup._dat.DefaultScale != null && Setup._dat.DefaultScale.Count == NumParts)
                 {
                     for (var i = 0; i < NumParts; i++)
@@ -609,7 +609,7 @@ namespace ACE.Server.Physics
         public void Update(double quantum, ref AFrame offsetFrame)
         {
             Sequence.Update((float)quantum, ref offsetFrame);
-        } 
+        }
 
         public void UpdateParts(AFrame frame)
         {
@@ -626,7 +626,7 @@ namespace ACE.Server.Physics
             {
                 // should particles have this populated?
                 if (Parts[i] == null) continue;
-                
+
                 var curPartFrame = curFrame != null ? new AFrame(curFrame.Frames[i]) : new AFrame(Vector3.Zero, Quaternion.Identity);
 
                 Parts[i].Pos.Frame.Combine(frame, curPartFrame, Scale);
@@ -635,7 +635,7 @@ namespace ACE.Server.Physics
                     Parts[i].Buffer.UpdateInstance(Parts[i].BufferIdx, Parts[i].Pos.GetWorldPos(), Parts[i].Pos.Frame.Orientation.ToXna(), Parts[i].GfxObjScale.ToXna());
             }
         }
- 
+
         public void UpdateViewerDistance(float cypt, Vector3 heading)
         {
             foreach (var part in Parts) part.UpdateViewerDistance();

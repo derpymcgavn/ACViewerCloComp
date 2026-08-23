@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,7 +10,10 @@ using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
 using ACE.Entity.Enum;
 using ACViewer.CustomPalettes;
+using ACViewer.ClothingStudio;
 using ACViewer.CustomTextures;
+using ACViewer.Services;
+using ACViewer.Utilities;
 using AvalonDock.Layout;
 using ACViewer.Model; // for CloSubPalette definitions
 using ACViewer.ViewModels;
@@ -51,6 +55,9 @@ namespace ACViewer.View
             InitializeComponent();
             Instance = this;
             DataContext = ViewModels.ClothingEditingSession.Instance;
+            ClothingEditingSession.Instance.OpenClothingRequested += Session_OpenClothingRequested;
+
+            ClothingEditingSession.Instance.ClothingIdChanged += Session_ClothingIdChanged;
 
             // Subscribe to live-reload events so session/UI update when watched file changes
             CustomTextureStore.ClothingJsonUpdated += OnWatchedClothingJsonUpdated;
@@ -93,9 +100,64 @@ namespace ACViewer.View
             catch { }
         }
 
+        private void Session_OpenClothingRequested(ClothingTable clothing)
+        {
+            if (clothing != null)
+            {
+                OnClickClothingBase(clothing, clothing.Id, null, null);
+                OpenCustomDialog();
+                return;
+            }
+
+            CurrentClothingItem = null;
+            SetupIds.Items.Clear();
+            PaletteTemplates.Items.Clear();
+            ResetShadesSlider();
+            _customActive = false;
+            _customCloSubPalettes = null;
+            CustomPaletteDialog.ActiveInstance?.RefreshForCurrentClothing(null);
+            ClothingStudioWorkflowService.Instance.SelectClothing(null);
+        }
+
+        private void ClothingItems_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.AddedItems.Count == 0 || e.AddedItems[0] is not ClothingTableVM selected) return;
+            if (CurrentClothingItem?.Id == selected.Id) return;
+            var session = ClothingEditingSession.Instance;
+            if (session.TryGetModel(selected.Id, out var model))
+                OnClickClothingBase(model, model.Id, null, null);
+        }
+
         /// <summary>
         /// Applies a CustomTextureDefinition (part/old->new) to a clothing table in-place using reflection on CloTextureEffect.NewTexture.
         /// </summary>
+        private void AssignClothingId_Click(object sender, RoutedEventArgs e)
+        {
+            var session = ClothingEditingSession.Instance;
+            if (session.SelectedClothing == null || CurrentClothingItem == null)
+            {
+                MessageBox.Show("Select or clone a working clothing mod first.", "Assign Clothing ID", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var picker = new ClothingIdPickerWindow(session, session.SelectedClothing.Id)
+            {
+                Owner = Window.GetWindow(this)
+            };
+            if (picker.ShowDialog() != true) return;
+            if (!session.TryAssignClothingId(picker.SelectedId, picker.AllowPortalOverride, out var error))
+            {
+                MessageBox.Show(error, "Assign Clothing ID", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            MainWindow?.AddStatusText($"Clothing mod reassigned to 0x{picker.SelectedId:X8}.");
+        }
+
+        private void Session_ClothingIdChanged(uint oldId, uint newId)
+        {
+            CustomPaletteDialog.ActiveInstance?.HandleClothingIdChanged(oldId, newId);
+            MainWindow?.RealtimeJsonSync();
+        }
+
         internal static void ApplyTextureOverridesToClothing(ClothingTable clothing, CustomTextureDefinition overridesDef)
         {
             if (clothing == null || overridesDef == null || overridesDef.Entries == null) return;
@@ -147,6 +209,7 @@ namespace ACViewer.View
         public void OnClickClothingBase(ClothingTable clothing, uint fileID, uint? paletteTemplate = null, float? shade = null)
         {
             CurrentClothingItem = clothing;
+            ClothingStudioWorkflowService.Instance.SelectClothing(clothing);
             // Populate / refresh editing session view model (Phase 2 mapping)
             try
             {
@@ -161,8 +224,14 @@ namespace ACViewer.View
                     session.ActiveTextureOverrides = null;
                     session.IsDirty = false;
                 }
-                // enable palette dialog if open
-                CustomPaletteDialog.ActiveInstance?.SetHasClothing(clothing != null);
+                // Refresh docked palette/texture editor after the selection event unwinds so the
+                // clothing list and 3D preview stay responsive while heavy DAT-derived rows rebuild.
+                var activePaletteDefinition = session.ActivePaletteDefinition;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (ReferenceEquals(CurrentClothingItem, clothing))
+                        CustomPaletteDialog.ActiveInstance?.RefreshForCurrentClothing(activePaletteDefinition);
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch { }
             SetupIds.Items.Clear();
@@ -186,7 +255,8 @@ namespace ACViewer.View
             PaletteTemplates.Items.Add(new ListBoxItem { Content = "Custom...", DataContext = CustomPaletteKey });
             SetupIds.SelectedIndex = 0;
 
-            if (paletteTemplate == null) PaletteTemplates.SelectedIndex = 0; else
+            if (paletteTemplate == null) PaletteTemplates.SelectedIndex = 0;
+            else
             {
                 string pal = (PaletteTemplate)paletteTemplate + " - " + paletteTemplate;
                 for (var i = 0; i < PaletteTemplates.Items.Count; i++)
@@ -227,6 +297,7 @@ namespace ACViewer.View
             if (palTemp == CustomPaletteKey)
             {
                 OpenCustomDialog();
+                Dispatcher.BeginInvoke(new Action(PromptAndAddCustomPaletteEntry));
                 return;
             }
 
@@ -264,6 +335,7 @@ namespace ACViewer.View
             }
 
             _customActive = false;
+            ClothingStudioWorkflowService.Instance.SelectPaletteTemplate(palTemp);
             LoadModelWithClothingBase();
             RefreshDockEditorsIfPresent();
         }
@@ -324,12 +396,183 @@ namespace ACViewer.View
             return def;
         }
 
-        public void LoadModelWithClothingBase()
+        private void PromptAndAddCustomPaletteEntry()
+        {
+            var seed = _customActive ? BuildSeedDefinitionFromCustom() : BuildSeedDefinition();
+            var firstEntry = seed?.Entries?.FirstOrDefault();
+
+            uint defaultPaletteId = firstEntry?.PaletteSetId ?? GetDefaultCustomPaletteId();
+            string defaultRanges = FormatRanges(firstEntry?.Ranges);
+            float defaultShade = seed?.Shade ?? Shade;
+
+            var window = new CustomPaletteEntryWindow(GetDefaultCustomPaletteTemplate().ToString(CultureInfo.InvariantCulture), HexId.Format(GetDefaultCustomPaletteIcon()), HexId.Format(defaultPaletteId), defaultRanges, defaultShade)
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            if (window.ShowDialog() != true)
+                return;
+
+            var editor = CustomPaletteDialog.ActiveInstance;
+            if (editor == null)
+            {
+                MainWindow?.AddStatusText("Clothing Studio panel was not ready for the new custom palette.");
+                return;
+            }
+
+            editor.AddPaletteEntryFromMenu(window.PaletteTemplate, window.IconId, window.PaletteId, window.Ranges, window.Shade);
+            var paletteDefinition = BuildSinglePaletteDefinition(window.PaletteId, window.Ranges, window.Shade);
+            ApplyPaletteTemplateDefinition(window.PaletteTemplate, window.IconId, paletteDefinition);
+            PaletteTemplate = window.PaletteTemplate;
+            ClothingStudioWorkflowService.Instance.SelectPaletteTemplate(window.PaletteTemplate, paletteDefinition);
+            MainWindow?.AddStatusText($"Pal #{window.PaletteTemplate} added with palette 0x{window.PaletteId:X8}.");
+        }
+
+        private uint GetDefaultCustomPaletteId()
+        {
+            if (_customCloSubPalettes?.Count > 0)
+            {
+                var existing = _customCloSubPalettes.FirstOrDefault(sp => sp.PaletteSet != 0)?.PaletteSet ?? 0;
+                if (existing != 0)
+                    return existing;
+            }
+
+            var seed = BuildSeedDefinition();
+            var seedPalette = seed?.Entries?.FirstOrDefault(e => e.PaletteSetId != 0)?.PaletteSetId ?? 0;
+            if (seedPalette != 0)
+                return seedPalette;
+
+            if (CurrentClothingItem != null)
+            {
+                foreach (var sp in CurrentClothingItem.ClothingSubPalEffects.Values.SelectMany(e => e.CloSubPalettes))
+                {
+                    if (sp.PaletteSet != 0)
+                        return sp.PaletteSet;
+                }
+            }
+
+            return 0x0400007E;
+        }
+
+        private static string FormatRanges(IEnumerable<RangeDef> ranges)
+        {
+            if (ranges == null)
+                return "0:1";
+
+            var text = string.Join(",", ranges.Select(r => $"{r.Offset}:{r.Length}"));
+            return string.IsNullOrWhiteSpace(text) ? "0:1" : text;
+        }
+        private uint GetDefaultCustomPaletteTemplate()
+        {
+            if (CurrentClothingItem == null)
+                return 1;
+
+            var preferred = GetPreferredPaletteTemplate();
+            var start = preferred == 0 || preferred == CustomPaletteKey ? 1 : preferred + 1;
+            if (start == 0) start = 1;
+            for (var id = start; id < uint.MaxValue; id++)
+            {
+                if (id != 0 && !CurrentClothingItem.ClothingSubPalEffects.ContainsKey(id))
+                    return id;
+            }
+            return start;
+        }
+
+        private uint GetDefaultCustomPaletteIcon()
+        {
+            var preferred = GetPreferredPaletteTemplate();
+            return preferred == 0 || preferred == CustomPaletteKey ? 0 : GetPaletteIcon(preferred);
+        }
+
+        private static CustomPaletteDefinition BuildSinglePaletteDefinition(uint paletteId, IReadOnlyList<RangeDef> ranges, float shade)
+        {
+            return new CustomPaletteDefinition
+            {
+                Multi = false,
+                Shade = shade,
+                Entries = new List<CustomPaletteEntry>
+                {
+                    new() { PaletteSetId = paletteId, Ranges = ranges?.Select(r => new RangeDef { Offset = r.Offset, Length = r.Length }).ToList() ?? new List<RangeDef>() }
+                }
+            };
+        }
+
+        private void ApplyPaletteTemplateDefinition(uint paletteTemplate, uint iconId, CustomPaletteDefinition definition)
+        {
+            if (CurrentClothingItem == null || definition == null || paletteTemplate == 0)
+                return;
+
+            var effect = new CloSubPalEffect();
+            var iconProp = typeof(CloSubPalEffect).GetProperty(nameof(CloSubPalEffect.Icon), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            try { iconProp?.SetValue(effect, iconId); } catch { }
+
+            foreach (var subPalette in CustomPaletteFactory.Build(definition))
+            {
+                var clone = new CloSubPalette { PaletteSet = subPalette.PaletteSet };
+                foreach (var range in subPalette.Ranges)
+                    clone.Ranges.Add(new CloSubPaletteRange { Offset = range.Offset, NumColors = range.NumColors });
+                effect.CloSubPalettes.Add(clone);
+            }
+
+            if (effect.CloSubPalettes.Count == 0)
+                return;
+
+            CurrentClothingItem.ClothingSubPalEffects[paletteTemplate] = effect;
+            _lastActualPaletteTemplate = paletteTemplate;
+            _customActive = false;
+            _customCloSubPalettes = null;
+            ClothingEditingSession.Instance.ActivePaletteDefinition = definition;
+            ClothingEditingSession.Instance.IsDirty = true;
+            ClothingStudioWorkflowService.Instance.SelectPaletteTemplate(paletteTemplate, definition);
+            RefreshPaletteTemplateListSelection(paletteTemplate);
+            LoadModelWithClothingBase();
+            RefreshDockEditorsIfPresent();
+            MainWindow.Instance?.RealtimeJsonSync();
+        }
+
+        private void RefreshPaletteTemplateListSelection(uint paletteTemplate)
+        {
+            if (PaletteTemplates == null)
+                return;
+
+            ListBoxItem target = null;
+            foreach (var item in PaletteTemplates.Items.OfType<ListBoxItem>())
+            {
+                if (item.DataContext is uint id && id == paletteTemplate)
+                {
+                    target = item;
+                    break;
+                }
+            }
+
+            if (target == null)
+            {
+                target = new ListBoxItem { Content = $"{(PaletteTemplate)paletteTemplate} - {paletteTemplate}", DataContext = paletteTemplate };
+                var insertIndex = Math.Max(1, PaletteTemplates.Items.Count - 1);
+                PaletteTemplates.Items.Insert(insertIndex, target);
+            }
+
+            PaletteTemplates.SelectedItem = target;
+            PaletteTemplates.ScrollIntoView(target);
+        }
+        public void LoadModelWithClothingBase(bool resetCamera = true)
         {
             if (CurrentClothingItem == null || SetupIds.SelectedIndex == -1 || PaletteTemplates.SelectedIndex == -1)
                 return;
 
+            GameView.ViewMode = ACViewer.Enum.ViewMode.Model;
+
+            // DAT-backed browser events can run before GameView.PostInit creates the
+            // model renderer. Keep the editor/session selection and render it when
+            // PostInit calls this method again.
+            if (ModelViewer == null)
+            {
+                MainWindow?.AddStatusText("Model renderer is still initializing; clothing preview is queued.");
+                return;
+            }
+
             var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
+            ClothingStudioWorkflowService.Instance.SelectSetup(setupId);
             float shade = 0;
 
             if (Shades.Visibility == Visibility.Visible)
@@ -342,27 +585,34 @@ namespace ACViewer.View
             lblShade.Visibility = Shades.Visibility;
             lblShade.Content = "Shade: " + shade;
 
-            // If custom active, use custom path
-            if (_customActive && _customCloSubPalettes != null)
+            try
             {
-                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
-                return;
-            }
+                if (_customActive && _customCloSubPalettes != null)
+                {
+                    ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade, resetCamera);
+                    MainWindow?.AddStatusText($"Previewing custom clothing 0x{CurrentClothingItem.Id:X8} on setup 0x{setupId:X8}.");
+                    return;
+                }
 
-            // Standard path unified via resolved palettes (unless "None")
-            if (PaletteTemplate > 0)
-            {
-                _resolvedStandardPalettes = BuildResolvedPalettes(PaletteTemplate, shade);
-                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _resolvedStandardPalettes, shade);
+                if (PaletteTemplate > 0)
+                {
+                    _resolvedStandardPalettes = BuildResolvedPalettes(PaletteTemplate, shade);
+                    ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _resolvedStandardPalettes, shade, resetCamera);
+                }
+                else
+                {
+                    ModelViewer.LoadModel(setupId, CurrentClothingItem, (PaletteTemplate)0, shade, resetCamera);
+                    _resolvedStandardPalettes = null;
+                }
+
+                ClothingStudioWorkflowService.Instance.Validate(CurrentClothingItem);
+                MainWindow?.AddStatusText($"Previewing clothing 0x{CurrentClothingItem.Id:X8} on setup 0x{setupId:X8}.");
             }
-            else
+            catch (Exception ex)
             {
-                // No palette template selected ("None") -> fall back to vanilla
-                ModelViewer.LoadModel(setupId, CurrentClothingItem, (PaletteTemplate)0, shade);
-                _resolvedStandardPalettes = null;
+                MainWindow?.AddStatusText($"Failed to render clothing 0x{CurrentClothingItem.Id:X8} on setup 0x{setupId:X8}: {ex.Message}");
             }
         }
-
         private void Shades_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (Shades.Visibility == Visibility.Hidden) return;
@@ -427,65 +677,43 @@ namespace ACViewer.View
             return def;
         }
 
-        private List<uint> BuildAvailablePaletteIdList()
+        internal static List<uint> BuildAvailablePaletteIdList()
         {
-            // Collect referenced palette sets from clothing item (0x0Fxxxxxx)
-            List<uint> referencedSets = null;
-            uint requiredMaxColorIndex = 0; // exclusive upper bound (Offset + NumColors)
+            if (DatManager.PortalDat == null)
+                return new List<uint>();
+
+            var result = new HashSet<uint>();
+            uint requiredMaxColorIndex = 0; // exclusive upper bound in raw palette colors
 
             if (CurrentClothingItem != null && CurrentClothingItem.ClothingSubPalEffects.Count > 0)
             {
-                referencedSets = CurrentClothingItem.ClothingSubPalEffects
-                    .SelectMany(kvp => kvp.Value.CloSubPalettes)
-                    .Select(sp => sp.PaletteSet)
-                    .Where(id => (id >> 24) == 0x0F)
-                    .Distinct()
-                    .OrderBy(id => id)
-                    .ToList();
-
-                // Determine maximum color span required by the clothing's ranges so we can validate raw palettes (0x04)
-                foreach (var sp in CurrentClothingItem.ClothingSubPalEffects.SelectMany(k => k.Value.CloSubPalettes))
+                foreach (var sp in CurrentClothingItem.ClothingSubPalEffects.SelectMany(kvp => kvp.Value.CloSubPalettes))
                 {
-                    foreach (var r in sp.Ranges)
+                    if (sp.PaletteSet != 0)
+                        result.Add(sp.PaletteSet);
+
+                    foreach (var range in sp.Ranges)
                     {
-                        var end = r.Offset + r.NumColors; // ranges are expressed in raw color units already
+                        var end = range.Offset + range.NumColors;
                         if (end > requiredMaxColorIndex)
                             requiredMaxColorIndex = end;
                     }
                 }
             }
 
-            // If we have required color span, attempt to add compatible standalone palettes (0x04xxxxxx)
-            var result = new List<uint>();
-            if (referencedSets != null && referencedSets.Count > 0)
-                result.AddRange(referencedSets);
-
-            // Add individual palettes that are large enough to cover the required ranges
-            if (requiredMaxColorIndex > 0)
+            if (requiredMaxColorIndex == 0)
             {
-                foreach (var id in DatManager.PortalDat.AllFiles.Keys)
-                {
-                    if ((id >> 24) != 0x04) continue; // only raw palettes
-                    try
-                    {
-                        var pal = DatManager.PortalDat.ReadFromDat<Palette>(id);
-                        if (pal?.Colors?.Count >= requiredMaxColorIndex)
-                            result.Add(id);
-                    }
-                    catch { /* ignore unreadable palette */ }
-                }
+                return DatIdIndex.PaletteAndPaletteSetIds().ToList();
             }
 
-            if (result.Count > 0)
-                return result.Distinct().OrderBy(i => i).ToList();
+            foreach (var id in DatIdIndex.PaletteAndPaletteSetIds())
+            {
+                if (DatIdIndex.PaletteOrSetCovers(id, requiredMaxColorIndex))
+                    result.Add(id);
+            }
 
-            // Fallback: Full list of palette sets (0x0F) and palettes (0x04)
-            return DatManager.PortalDat.AllFiles.Keys
-                .Where(id => (id >> 24) == 0x04 || (id >> 24) == 0x0F)
-                .OrderBy(id => id)
-                .ToList();
+            return result.OrderBy(id => id).ToList();
         }
-
         public void OpenCustomDialog()
         {
             var mw = View.MainWindow.Instance;
@@ -513,9 +741,11 @@ namespace ACViewer.View
                     return;
                 }
 
-                var targetPane = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorablePane>()
-                    .FirstOrDefault(p => p.Children.Any(c => c.ContentId == "JsonEditor"))
-                    ?? layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorablePane>().FirstOrDefault();
+                var panes = layout.Descendents().OfType<AvalonDock.Layout.LayoutAnchorablePane>().ToList();
+                var targetPane = panes
+                    .FirstOrDefault(p => !p.Children.Any(c => c.ContentId == "Output" || c.ContentId == "JsonEditor" || c.ContentId == "Explorer"))
+                    ?? panes.FirstOrDefault(p => !p.Children.Any(c => c.ContentId == "Output" || c.ContentId == "JsonEditor"))
+                    ?? panes.FirstOrDefault();
 
                 if (targetPane == null)
                 {
@@ -528,7 +758,7 @@ namespace ACViewer.View
 
                 var anchor = new AvalonDock.Layout.LayoutAnchorable
                 {
-                    Title = "Custom Palette",
+                    Title = "Clothing Studio",
                     ContentId = "CustomPaletteDock",
                     Content = dlg,
                     CanClose = true,
@@ -584,8 +814,11 @@ namespace ACViewer.View
             _customCloSubPalettes = list;
             _customShade = def.Shade;
             _customActive = true;
+            GameView.ViewMode = ACViewer.Enum.ViewMode.Model;
+            if (ModelViewer == null) return;
             var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
-            ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
+            ClothingStudioWorkflowService.Instance.SelectSetup(setupId);
+            ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade, resetCamera: false);
             MainWindow.Instance?.RealtimeJsonSync();
         }
 
@@ -601,7 +834,10 @@ namespace ACViewer.View
                     sp.Ranges.Add(new CloSubPaletteRange { Offset = r.Offset * 8, NumColors = r.Length * 8 });
                 list.Add(sp);
             }
+            GameView.ViewMode = ACViewer.Enum.ViewMode.Model;
+            if (ModelViewer == null) return;
             var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
+            ClothingStudioWorkflowService.Instance.SelectSetup(setupId);
             ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, list, def.Shade);
             MainWindow.Instance?.RealtimeJsonSync();
         }
@@ -697,6 +933,22 @@ namespace ACViewer.View
             }
         }
 
+        internal static uint GetPreferredPaletteTemplate()
+        {
+            if (_lastActualPaletteTemplate.HasValue && _lastActualPaletteTemplate.Value != 0)
+                return _lastActualPaletteTemplate.Value;
+            if (PaletteTemplate != 0 && PaletteTemplate != CustomPaletteKey)
+                return PaletteTemplate;
+            return CurrentClothingItem?.ClothingSubPalEffects.Keys.OrderBy(key => key).FirstOrDefault() ?? 1u;
+        }
+
+        internal static uint GetPaletteIcon(uint paletteTemplate)
+        {
+            if (CurrentClothingItem?.ClothingSubPalEffects.TryGetValue(paletteTemplate, out var effect) == true)
+                return effect.Icon;
+            return 0;
+        }
+
         internal void ApplyLivePaletteDefinition(CustomPaletteDefinition def)
         {
             if (def == null || CurrentClothingItem == null || SetupIds.SelectedIndex < 0) return;
@@ -715,9 +967,14 @@ namespace ACViewer.View
                 _customCloSubPalettes = list;
                 _customShade = def.Shade;
                 _customActive = true; // ensure model uses custom path
+                ClothingStudioWorkflowService.Instance.SelectPaletteTemplate(CustomPaletteKey, def);
+                GameView.ViewMode = ACViewer.Enum.ViewMode.Model;
+                if (ModelViewer == null) return;
                 var setupId = (uint)((ListBoxItem)SetupIds.SelectedItem).DataContext;
-                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade);
+            ClothingStudioWorkflowService.Instance.SelectSetup(setupId);
+                ModelViewer.LoadModelCustom(setupId, CurrentClothingItem, _customCloSubPalettes, _customShade, resetCamera: false);
                 MainWindow.Instance?.RealtimeJsonSync();
+                ClothingEditingSession.Instance.ActivePaletteDefinition = def;
             }
             catch { }
         }

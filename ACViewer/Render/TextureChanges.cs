@@ -4,11 +4,11 @@ using ACViewer.Model;
 
 namespace ACViewer.Render
 {
-    public class TextureChanges: IEquatable<TextureChanges>
+    public class TextureChanges : IEquatable<TextureChanges>
     {
         public uint TextureId { get; set; }   // 0x6 texture file id
         public float Translucency { get; set; }
-        public PaletteChanges PaletteChanges { get; set; } 
+        public PaletteChanges PaletteChanges { get; set; }
 
         public TextureChanges(uint textureId, float translucency = 0.0f, PaletteChanges paletteChanges = null)
         {
@@ -42,7 +42,7 @@ namespace ACViewer.Render
             int hash = 0;
 
             hash = (hash * 397) ^ TextureId.GetHashCode();
-            
+
             hash = (hash * 397) ^ Translucency.GetHashCode();
 
             if (PaletteChanges != null)

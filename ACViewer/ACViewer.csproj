@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -6,6 +6,11 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon />
     <StartupObject />
+    <AssemblyName>DerpAceClothingStudio</AssemblyName>
+    <RootNamespace>ACViewer</RootNamespace>
+    <Product>DerpACE Clothing Studio</Product>
+    <AssemblyTitle>DerpACE Clothing Studio</AssemblyTitle>
+    <Description>CloComp clothing, palette, texture, and DerpACE administration studio.</Description>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -45,6 +50,9 @@
 	  <PackageReference Include="MonoGame.Framework.WindowsDX" Version="3.8.0.1641" />
 	  <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.0.1641" />
 	  <PackageReference Include="MonoGame.Framework.WpfInterop" Version="1.9.2" />
+      <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.72.1" />
+      <PackageReference Include="Chorizite.DatReaderWriter" Version="2.1.7" />
+      <PackageReference Include="Chorizite.DatReaderWriter.Extensions" Version="1.1.1" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 	  <PackageReference Include="UkooLabs.FbxSharpie" Version="1.0.99" />
       <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
@@ -100,34 +108,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
-	<PropertyGroup>
-		<PostBuildEvent>
-			robocopy $(SolutionDir)docs $(TargetDir)docs /S /E /COPY:DAT /MIR /NP /TEE /V
-
-			if %25ERRORLEVEL%25 EQU 16 echo ***FATAL ERROR*** &amp; goto end
-			if %25ERRORLEVEL%25 EQU 15 echo OKCOPY + FAIL + MISMATCHES + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 14 echo FAIL + MISMATCHES + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 13 echo OKCOPY + FAIL + MISMATCHES &amp; goto end
-			if %25ERRORLEVEL%25 EQU 12 echo FAIL + MISMATCHES&amp; goto end
-			if %25ERRORLEVEL%25 EQU 11 echo OKCOPY + FAIL + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 10 echo FAIL + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 9 echo OKCOPY + FAIL &amp; goto end
-			if %25ERRORLEVEL%25 EQU 8 echo FAIL &amp; goto end
-			if %25ERRORLEVEL%25 EQU 7 echo OKCOPY + MISMATCHES + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 6 echo MISMATCHES + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 5 echo OKCOPY + MISMATCHES &amp; goto end
-			if %25ERRORLEVEL%25 EQU 4 echo MISMATCHES &amp; goto end
-			if %25ERRORLEVEL%25 EQU 3 echo OKCOPY + XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 2 echo XTRA &amp; goto end
-			if %25ERRORLEVEL%25 EQU 1 echo OKCOPY &amp; goto end
-			if %25ERRORLEVEL%25 EQU 0 echo No Change &amp; goto end
-			:end
-			exit 0
-		</PostBuildEvent>
-	</PropertyGroup>
-
-	<PropertyGroup>
-		<SourceRevisionId>build$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</SourceRevisionId>
-	</PropertyGroup>	
+  <Target Name="CopyDocsToOutput" AfterTargets="Build" Condition="Exists('$(SolutionDir)docs')">
+    <ItemGroup>
+      <DocFiles Include="$(SolutionDir)docs\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DocFiles)"
+          DestinationFiles="@(DocFiles->'$(TargetDir)docs\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 </Project>

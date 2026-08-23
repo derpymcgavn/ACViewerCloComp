@@ -16,7 +16,7 @@ namespace ACViewer.Entity
             var viewerSpaceLocation = new TreeNode($"Viewer space location: {_lightInfo.ViewerSpaceLocation}");
 
             var color = new TreeNode($"Color: {Color.ToRGBA(_lightInfo.Color)}");
-            
+
             var intensity = new TreeNode($"Intensity: {_lightInfo.Intensity}");
 
             var falloff = new TreeNode($"Falloff: {_lightInfo.Falloff}");

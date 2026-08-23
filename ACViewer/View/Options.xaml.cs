@@ -128,7 +128,7 @@ namespace ACViewer.View
 
         public string Theme
         {
-            get => Config.Theme ?? "Default";
+            get => string.IsNullOrWhiteSpace(Config.Theme) ? ThemeManager.DefaultTheme : Config.Theme;
             set
             {
                 ThemeManager.SetTheme(value);
@@ -207,7 +207,7 @@ namespace ACViewer.View
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             var prevTheme = Config.Theme;
-            
+
             ACViewer.Config.ConfigManager.RestoreSnapshot();
 
             foreach (var propName in allProperties)
@@ -258,9 +258,9 @@ namespace ACViewer.View
                 Spinner.Visibility = Visibility.Hidden;
 
                 if (DatabaseConnected)
-                    DBStatus.Source = new BitmapImage(new Uri(@"/ACViewer;component/Icons/Checkmark_16x.png", UriKind.Relative));
+                    DBStatus.Source = new BitmapImage(new Uri(@"/DerpAceClothingStudio;component/Icons/Checkmark_16x.png", UriKind.Relative));
                 else
-                    DBStatus.Source = new BitmapImage(new Uri(@"/ACViewer;component/Icons/StatusCriticalError_16x.png", UriKind.Relative));
+                    DBStatus.Source = new BitmapImage(new Uri(@"/DerpAceClothingStudio;component/Icons/StatusCriticalError_16x.png", UriKind.Relative));
             };
 
             worker.RunWorkerAsync();
@@ -410,7 +410,7 @@ namespace ACViewer.View
             if (Initting) return;
 
             Initting = true;
-            
+
             MouseSpeed = (float)Math.Round(e.NewValue, 1, MidpointRounding.ToEven);
 
             Initting = false;

@@ -27,7 +27,7 @@ namespace ACE.Server.WorldObjects
         {
 
         }
-        
+
         /// <summary>
         /// A new biota be created taking all of its values from weenie.
         /// </summary>
@@ -213,7 +213,7 @@ namespace ACE.Server.WorldObjects
             else if (target is SpellProjectile spellProjectile)
                 spellProjectile.OnCollideObject(this);
             //else if (target.ProjectileTarget != null)
-                //ProjectileCollisionHelper.OnCollideObject(target, this);
+            //ProjectileCollisionHelper.OnCollideObject(target, this);
         }
 
         public override void OnCollideObjectEnd(WorldObject target)

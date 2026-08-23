@@ -13,7 +13,7 @@ namespace ACViewer
     public class ViewObject
     {
         public PhysicsObj PhysicsObj { get; set; }
-        
+
         public static uint NextGuid { get; set; } = 1;
 
         public ViewObject(uint setupID)
@@ -72,7 +72,7 @@ namespace ACViewer
             motionInterp.apply_raw_movement(true, true);
 
             //if (PhysicsObj.PartArray.MotionTableManager.PendingAnimations.Count() > 0)
-                //Console.WriteLine("Motions pending");
+            //Console.WriteLine("Motions pending");
         }
 
         public void DoMotion(MotionCommand motionCommand)
@@ -89,7 +89,7 @@ namespace ACViewer
             motionInterp.apply_raw_movement(true, true);
 
             //if (PhysicsObj.PartArray.MotionTableManager.PendingAnimations.Count() > 0)
-                //Console.WriteLine("Motions pending");
+            //Console.WriteLine("Motions pending");
         }
 
         public void Update(GameTime time)

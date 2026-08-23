@@ -13,14 +13,14 @@ using System.Windows.Shapes;
 
 namespace ACViewer.View
 {
-	/// <summary>
-	/// Interaction logic for ucSpinnerApple.xaml
-	/// </summary>
-	public partial class ucSpinnerApple : UserControl
-	{
-		public ucSpinnerApple()
-		{
-			this.InitializeComponent();
-		}
-	}
+    /// <summary>
+    /// Interaction logic for ucSpinnerApple.xaml
+    /// </summary>
+    public partial class ucSpinnerApple : UserControl
+    {
+        public ucSpinnerApple()
+        {
+            this.InitializeComponent();
+        }
+    }
 }

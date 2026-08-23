@@ -12,7 +12,7 @@ namespace ACViewer.Entity
         {
             Name = name;
             Items = items ?? new List<TreeNode>();
-            
+
             Clickable = clickable;
         }
     }

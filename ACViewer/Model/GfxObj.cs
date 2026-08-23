@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -33,7 +33,7 @@ namespace ACViewer.Model
         public BoundingBox BoundingBox { get; set; }
 
         private bool? hasWrappingUVs;
-        
+
         public bool HasWrappingUVs
         {
             get
@@ -47,6 +47,12 @@ namespace ACViewer.Model
 
         public GfxObj(uint gfxObjID, bool doBuild = true)
         {
+            if (!doBuild)
+            {
+                CopyGeometryFrom(GfxObjCache.Get(gfxObjID));
+                return;
+            }
+
             MainWindow.Instance.Status.WriteLine($"Loading GfxObj {gfxObjID:X8}");
 
             _gfxObj = DatManager.PortalDat.ReadFromDat<ACE.DatLoader.FileTypes.GfxObj>(gfxObjID);
@@ -68,6 +74,15 @@ namespace ACViewer.Model
             //BuildVertexBuffer();
         }
 
+        private void CopyGeometryFrom(GfxObj cached)
+        {
+            _gfxObj = cached._gfxObj;
+            VertexArray = cached.VertexArray;
+            UVLookup = cached.UVLookup;
+            BoundingBox = cached.BoundingBox;
+            hasWrappingUVs = cached.hasWrappingUVs;
+        }
+
         public void BuildPolygons()
         {
             Polygons = new List<Polygon>();
@@ -80,7 +95,7 @@ namespace ACViewer.Model
         {
             // bad data 02001C50
             if (VertexArray.Count == 0) return;
-            
+
             VertexBuffer = new VertexBuffer(GraphicsDevice, typeof(VertexPositionNormalTexture), VertexArray.Count, BufferUsage.WriteOnly);
             VertexBuffer.SetData(VertexArray.ToArray());
         }

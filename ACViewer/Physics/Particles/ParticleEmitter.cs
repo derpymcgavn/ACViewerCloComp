@@ -64,7 +64,7 @@ namespace ACE.Server.Physics
             // which persists even though Parts[i] is nulled below, and is reused for BirthratePerSec emitters.
             // for BirthRatePerSec moving particles, Pos needs to be reset for each reused PartStorage
             Parts[i].Pos.Clear();
-                                              
+
             Parts[i] = null;
             NumParticles--;
 
@@ -152,7 +152,7 @@ namespace ACE.Server.Physics
 
             Parts[nextIdx] = PartStorage[nextIdx];
             //if (Parts[nextIdx] == null)   // check if index exists?
-                //return;
+            //return;
 
             var firstParticle = Info.TotalParticles == 0 && Info.TotalSeconds == 0.0f;
 

@@ -56,7 +56,7 @@ namespace ACE.Server.WorldObjects
         {
             Biota = new Biota();
         }
-        
+
         /// <summary>
         /// A new biota will be created taking all of its values from weenie.
         /// </summary>
@@ -161,7 +161,7 @@ namespace ACE.Server.WorldObjects
 
             // exclude linkspots from spawning
             if (WeenieClassId == 10762) return true;
-            
+
             var success = PhysicsObj.enter_world(location);
 
             if (!success || PhysicsObj.CurCell == null)
@@ -203,18 +203,18 @@ namespace ACE.Server.WorldObjects
                 return false;
 
             //if (!LandblockManager.AddObject(this))
-                //return false;
+            //return false;
 
             //if (SuppressGenerateEffect != true)
-                //ApplyVisualEffects(PlayScript.Create);
+            //ApplyVisualEffects(PlayScript.Create);
 
             //if (Generator != null)
-                //OnGeneration(Generator);
+            //OnGeneration(Generator);
 
             //Console.WriteLine($"{Name}.EnterWorld()");
             return ACViewer.Server.EnterWorld(this);
         }
-        
+
         /// <summary>
         /// Returns TRUE if this WorldObject is a generic linkspot
         /// Linkspots are used for things like Houses,
@@ -290,7 +290,7 @@ namespace ACE.Server.WorldObjects
             }
 
             //if (this is Pet pet && pet.P_PetOwner?.CurrentActivePet == this)
-                //pet.P_PetOwner.CurrentActivePet = null;
+            //pet.P_PetOwner.CurrentActivePet = null;
 
             /*if (this is Vendor vendor)
             {
@@ -315,7 +315,7 @@ namespace ACE.Server.WorldObjects
             //CurrentLandblock?.RemoveWorldObject(Guid);
             if (PhysicsObj != null)
                 PhysicsObj.DestroyObject();
- 
+
             //RemoveBiotaFromDatabase();
 
             if (Guid.IsDynamic())

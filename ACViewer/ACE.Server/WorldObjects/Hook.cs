@@ -90,7 +90,7 @@ namespace ACE.Server.WorldObjects
             Name = item.NameWithMaterial;
 
             //if (MotionTableId != 0)
-                //CurrentMotionState = new Motion(MotionStance.Invalid);
+            //CurrentMotionState = new Motion(MotionStance.Invalid);
 
             Placement = (Placement)(item.HookPlacement ?? (int)ACE.Entity.Enum.Placement.Hook);
 
@@ -135,7 +135,7 @@ namespace ACE.Server.WorldObjects
             Ethereal = true;
 
             //if (MotionTableId == 0)
-                //CurrentMotionState = null;
+            //CurrentMotionState = null;
 
             //removedItem.EmoteManager.ClearProxy();
 

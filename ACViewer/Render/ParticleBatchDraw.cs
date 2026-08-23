@@ -17,7 +17,7 @@ namespace ACViewer.Render
         public EffectParameters EffectParameters { get; set; }
 
         // static buffer = billboard
-        
+
         // instance buffer
         public List<ParticleDeclaration> Instances { get; set; }
         public ParticleDeclaration[] Instances_ { get; set; }
@@ -58,7 +58,7 @@ namespace ACViewer.Render
             }
 
             var startIdx = Instances.Count;
-            
+
             var instance = new ParticleDeclaration(textureIdx, dims);
             Instances.Add(instance);
 
@@ -118,7 +118,7 @@ namespace ACViewer.Render
                 GraphicsDevice.BlendState = BlendState.Additive;
             else
                 GraphicsDevice.BlendState = BlendState.NonPremultiplied;
-            
+
             foreach (EffectPass pass in Effect.CurrentTechnique.Passes)
             {
                 pass.Apply();
@@ -131,7 +131,7 @@ namespace ACViewer.Render
         {
             UpdateParticle(emitter, particleIdx);
         }
-        
+
         public void UpdateParticle(ParticleEmitter emitter, int particleIdx)
         {
             var instanceIdx = emitter.BatchIdx + particleIdx;

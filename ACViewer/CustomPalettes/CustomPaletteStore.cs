@@ -2,12 +2,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using ACViewer.Config;
+
 
 namespace ACViewer.CustomPalettes
 {
     public static class CustomPaletteStore
     {
-        private const string FileName = "CustomPalettes.json";
+        private const string LegacyFileName = "CustomPalettes.json";
+        private static string FileName
+        {
+            get
+            {
+                var directory = ConfigManager.AppDataDirectory;
+                Directory.CreateDirectory(directory);
+                var fileName = Path.Combine(directory, LegacyFileName);
+                if (!File.Exists(fileName) && File.Exists(LegacyFileName))
+                    File.Copy(LegacyFileName, fileName);
+                return fileName;
+            }
+        }
         private static List<CustomPaletteDefinition> _cache;
 
         public static IEnumerable<CustomPaletteDefinition> LoadAll()

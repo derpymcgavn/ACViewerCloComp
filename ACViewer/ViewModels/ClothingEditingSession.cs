@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -9,6 +10,7 @@ using ACE.DatLoader.FileTypes; // for future expansion
 using ACViewer.CustomPalettes; // for RangeDef reuse if desired
 using ACE.DatLoader.Entity; // clothing table types live here
 using ACViewer.CustomTextures;
+using ACViewer.ClothingStudio;
 
 namespace ACViewer.ViewModels
 {
@@ -24,6 +26,12 @@ namespace ACViewer.ViewModels
 
         public ObservableCollection<ClothingTableVM> ClothingItems { get; } = new();
         public ObservableCollection<SetupVM> Setups { get; } = new();
+        public ClothingStudioWorkflowService Workflow { get; } = ClothingStudioWorkflowService.Instance;
+        private readonly Dictionary<uint, ClothingTable> _models = new();
+
+        public event Action<ClothingTable> OpenClothingRequested;
+        public event Action<uint, uint> ClothingIdChanged;
+
 
         // Single source-of-truth properties
         private ACE.DatLoader.FileTypes.ClothingTable _currentClothingRaw;
@@ -40,6 +48,7 @@ namespace ACViewer.ViewModels
                     ActivePaletteDefinition = null;
                     ActiveTextureOverrides = null;
                     IsDirty = false;
+                    Workflow.SelectClothing(_currentClothingRaw);
                 }
             }
         }
@@ -76,6 +85,86 @@ namespace ACViewer.ViewModels
         {
             while (IdExists(_nextSetupId)) _nextSetupId++;
             return _nextSetupId++;
+        }
+        public IReadOnlyList<ClothingIdSuggestion> SuggestClothingIds(uint currentId, int count = 6)
+        {
+            var suggestions = new List<ClothingIdSuggestion>();
+            AddSuggestion(FindFreeClothingId(0x10FF0000), "recommended custom range");
+            if (currentId >= 0x10000000 && currentId < 0x10FFFFFF)
+                AddSuggestion(FindFreeClothingId(currentId + 1), "next free after current");
+            AddSuggestion(FindFreeClothingId(0x10FE0000), "alternate custom range");
+            AddSuggestion(FindFreeClothingId(0x10FD0000), "alternate custom range");
+
+            var cursor = 0x10FF0000u;
+            while (suggestions.Count < count && cursor <= 0x10FFFFFF)
+            {
+                var candidate = FindFreeClothingId(cursor);
+                if (candidate == 0) break;
+                AddSuggestion(candidate, "available ClothingMod ID");
+                cursor = candidate == 0x10FFFFFF ? 0 : candidate + 1;
+                if (cursor == 0) break;
+            }
+            return suggestions.Take(count).ToList();
+
+            void AddSuggestion(uint id, string reason)
+            {
+                if (id != 0 && id != currentId && suggestions.All(item => item.Id != id))
+                    suggestions.Add(new ClothingIdSuggestion { Id = id, Reason = reason });
+            }
+        }
+
+        public bool TryAssignClothingId(uint newId, bool allowPortalOverride, out string error)
+        {
+            error = null;
+            if (SelectedClothing == null || !TryGetModel(SelectedClothing.Id, out var model))
+            {
+                error = "No working clothing mod is selected.";
+                return false;
+            }
+            var oldId = SelectedClothing.Id;
+            if ((newId >> 24) != 0x10)
+            {
+                error = "Clothing IDs must be in the 0x10000000-0x10FFFFFF range.";
+                return false;
+            }
+            if (newId != oldId && ClothingItems.Any(item => item != SelectedClothing && item.Id == newId))
+            {
+                error = $"Working mod 0x{newId:X8} already exists.";
+                return false;
+            }
+            var portalCollision = false;
+            try { portalCollision = DatManager.PortalDat?.AllFiles?.ContainsKey(newId) == true; } catch { }
+            if (newId != oldId && portalCollision && !allowPortalOverride)
+            {
+                error = $"0x{newId:X8} already exists in portal.dat. Enable existing-ID override only if replacing it is intentional.";
+                return false;
+            }
+            if (newId == oldId) return true;
+
+            _models.Remove(oldId);
+            ClothingModService.AssignId(model, newId);
+            _models[newId] = model;
+            SelectedClothing.Id = newId;
+            IsDirty = true;
+            ClothingIdChanged?.Invoke(oldId, newId);
+            return true;
+        }
+
+        public bool IsPortalClothingId(uint id)
+        {
+            try { return DatManager.PortalDat?.AllFiles?.ContainsKey(id) == true; }
+            catch { return false; }
+        }
+
+        private uint FindFreeClothingId(uint start)
+        {
+            if ((start >> 24) != 0x10) return 0;
+            for (var id = start; id <= 0x10FFFFFF; id++)
+            {
+                if (!IdExists(id)) return id;
+                if (id == 0x10FFFFFF) break;
+            }
+            return 0;
         }
 
         private static bool IdExists(uint id)
@@ -114,48 +203,56 @@ namespace ACViewer.ViewModels
         private CloSubPaletteVM _selectedCloSubPalette;
         public CloSubPaletteVM SelectedCloSubPalette { get => _selectedCloSubPalette; set { if (_selectedCloSubPalette != value) { _selectedCloSubPalette = value; OnPropertyChanged(); } } }
 
+        public void RegisterModel(ClothingTable model)
+        {
+            if (model != null) _models[model.Id] = model;
+        }
+
+        public bool TryGetModel(uint id, out ClothingTable model) => _models.TryGetValue(id, out model);
+
+        private void RegisterAndOpen(ClothingTable model)
+        {
+            RegisterModel(model);
+            var vm = ClothingMapping.AddOrUpdate(this, model);
+            vm.IsModified = true;
+            SelectedClothing = vm;
+            OpenClothingRequested?.Invoke(model);
+        }
+
         private void NewClothing()
         {
-            var id = NextClothingId();
-            var vm = new ClothingTableVM { Id = id, IsModified = true };
-            ClothingItems.Add(vm);
-            SelectedClothing = vm;
+            RegisterAndOpen(ClothingModService.CreateEmpty(NextClothingId()));
             IsDirty = true;
         }
 
         private void CloneSelectedClothing()
         {
             if (SelectedClothing == null) return;
+            if (!TryGetModel(SelectedClothing.Id, out var source)) return;
             var newId = NextClothingId();
-            var clone = new ClothingTableVM { Id = newId, IsModified = true };
-            foreach (var be in SelectedClothing.BaseEffects)
-            {
-                var beClone = new BaseEffectVM { BaseId = be.BaseId };
-                foreach (var spe in be.SubPaletteEffects)
-                {
-                    var speClone = new SubPaletteEffectVM { EffectId = spe.EffectId };
-                    foreach (var csp in spe.CloSubPalettes)
-                    {
-                        var cspClone = new CloSubPaletteVM { PaletteSetId = csp.PaletteSetId, Shade = csp.Shade };
-                        foreach (var r in csp.Ranges)
-                            cspClone.Ranges.Add(new RangeVM { OffsetGroups = r.OffsetGroups, LengthGroups = r.LengthGroups });
-                        speClone.CloSubPalettes.Add(cspClone);
-                    }
-                    beClone.SubPaletteEffects.Add(speClone);
-                }
-                clone.BaseEffects.Add(beClone);
-            }
-            ClothingItems.Add(clone);
-            SelectedClothing = clone;
+            RegisterAndOpen(ClothingModService.Clone(source, newId));
             IsDirty = true;
         }
 
         private void DeleteSelectedClothing()
         {
             if (SelectedClothing == null) return;
+            if (System.Windows.MessageBox.Show(
+                    $"Remove working clothing mod 0x{SelectedClothing.Id:X8}?\n\nExported files are not deleted.",
+                    "Delete Working Mod",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
+                return;
             var idx = ClothingItems.IndexOf(SelectedClothing);
+            var removedId = SelectedClothing.Id;
             ClothingItems.Remove(SelectedClothing);
+            _models.Remove(removedId);
             SelectedClothing = ClothingItems.Count > 0 ? ClothingItems[Math.Max(0, idx - 1)] : null;
+            CurrentClothingRaw = null;
+            if (SelectedClothing != null && TryGetModel(SelectedClothing.Id, out var next))
+                OpenClothingRequested?.Invoke(next);
+            else
+                OpenClothingRequested?.Invoke(null);
             IsDirty = true;
         }
 
@@ -218,7 +315,8 @@ namespace ACViewer.ViewModels
         public bool IsModified { get => _isModified; set => SetField(ref _isModified, value); }
         public event PropertyChangedEventHandler PropertyChanged;
         protected bool SetField<T>(ref T field, T value, [CallerMemberName] string m = null)
-        { if (Equals(field, value)) return false; field = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(m)); return true; }
+        { if (Equals(field, value)) return false; field = value; OnPropertyChanged(m); return true; }
+        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     public class RangeVM : VMBase
@@ -227,6 +325,7 @@ namespace ACViewer.ViewModels
         private uint _lengthGroups; // groups of 8 colors
         public uint OffsetGroups { get => _offsetGroups; set => SetField(ref _offsetGroups, value); }
         public uint LengthGroups { get => _lengthGroups; set => SetField(ref _lengthGroups, value); }
+        public string DisplayName => $"Range {OffsetGroups}:{LengthGroups}";
     }
 
     public class CloSubPaletteVM : VMBase
@@ -236,6 +335,7 @@ namespace ACViewer.ViewModels
         public uint PaletteSetId { get => _paletteSetId; set => SetField(ref _paletteSetId, value); }
         public float Shade { get => _shade; set => SetField(ref _shade, value); }
         public ObservableCollection<RangeVM> Ranges { get; } = new();
+        public string DisplayName => $"Palette 0x{PaletteSetId:X8} (shade {Shade:0.###})";
     }
 
     public class SubPaletteEffectVM : VMBase
@@ -243,6 +343,7 @@ namespace ACViewer.ViewModels
         private uint _effectId; // key from ClothingSubPalEffects dictionary
         public uint EffectId { get => _effectId; set => SetField(ref _effectId, value); }
         public ObservableCollection<CloSubPaletteVM> CloSubPalettes { get; } = new();
+        public string DisplayName => $"Sub-effect {EffectId}";
     }
 
     public class BaseEffectVM : VMBase
@@ -250,12 +351,13 @@ namespace ACViewer.ViewModels
         private uint _baseId; // key from ClothingBaseEffects
         public uint BaseId { get => _baseId; set => SetField(ref _baseId, value); }
         public ObservableCollection<SubPaletteEffectVM> SubPaletteEffects { get; } = new();
+        public string DisplayName => BaseId == 0xFFFFFFFF ? "Sub-palette effects" : $"Base setup 0x{BaseId:X8}";
     }
 
     public class ClothingTableVM : VMBase
     {
         private uint _id;
-        public uint Id { get => _id; set => SetField(ref _id, value); }
+        public uint Id { get => _id; set { if (SetField(ref _id, value)) OnPropertyChanged(nameof(DisplayName)); } }
         public string DisplayName => $"0x{Id:X8}";
         public ObservableCollection<BaseEffectVM> BaseEffects { get; } = new();
     }
@@ -265,6 +367,13 @@ namespace ACViewer.ViewModels
         private uint _id;
         public uint Id { get => _id; set => SetField(ref _id, value); }
         public string DisplayName => $"0x{Id:X8}";
+    }
+
+    public sealed class ClothingIdSuggestion
+    {
+        public uint Id { get; init; }
+        public string Reason { get; init; }
+        public string DisplayName => $"0x{Id:X8}  {Reason}";
     }
 
     #endregion

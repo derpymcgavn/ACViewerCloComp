@@ -146,9 +146,9 @@ namespace ACE.Server.Managers
             if (eventName.Equals("EventIsPKWorld", StringComparison.OrdinalIgnoreCase)) // special event
             {
                 //if (PropertyManager.GetBool("pk_server").Item)
-                    //return GameEventState.On;
+                //return GameEventState.On;
                 //else
-                    return GameEventState.Off;
+                return GameEventState.Off;
             }
 
             if (!Events.TryGetValue(eventName, out Event evnt))
